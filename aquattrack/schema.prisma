@@ -1,0 +1,142 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model Manager {
+  id              String           @id @default(cuid())
+  name            String
+  email           String           @unique
+  password        String
+  workers         Worker[]
+  bores           Bore[]
+  normalExpenses  NormalExpense[]
+  labourPayments  LabourPayment[]
+  pipeLogs        PipeLog[]
+  dieselPurchases DieselPurchase[]
+  dieselUsage     DieselUsage[]
+  agents          Agent[]
+  pipeStock       PipeStockItem[]
+
+  @@index([email])
+}
+
+model Worker {
+  id            String          @id @default(cuid())
+  name          String
+  place         String
+  monthlySalary Float
+  monthsWorked  Int
+  amountPaid    Float           @default(0)
+  managerId     String
+  manager       Manager         @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  payments      LabourPayment[]
+}
+
+model Bore {
+  id           String      @id @default(cuid())
+  date         DateTime
+  boreNumber   String
+  totalFeet    Float
+  pricePerFeet Float
+  agentName    String
+  totalBill    Float
+  managerId    String
+  manager      Manager     @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  pipesUsed    PipeEntry[]
+  payments     Payment[]
+}
+
+model PipeEntry {
+  id               String @id @default(cuid())
+  size             Float
+  length           Float
+  pricePerPipeFoot Float
+  boreId           String
+  bore             Bore   @relation(fields: [boreId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id      String   @id @default(cuid())
+  date    DateTime
+  amount  Float
+  boreId  String
+  bore    Bore     @relation(fields: [boreId], references: [id], onDelete: Cascade)
+}
+
+model NormalExpense {
+  id          String   @id @default(cuid())
+  description String
+  amount      Float
+  date        DateTime
+  managerId   String
+  manager     Manager  @relation(fields: [managerId], references: [id], onDelete: Cascade)
+}
+
+model LabourPayment {
+  id        String   @id @default(cuid())
+  workerId  String
+  worker    Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  amount    Float
+  date      DateTime
+  managerId String
+  manager   Manager  @relation(fields: [managerId], references: [id], onDelete: Cascade)
+}
+
+model PipeLog {
+  id          String   @id @default(cuid())
+  date        DateTime
+  type        String // "Purchase" or "Usage"
+  quantity    Int
+  diameter    Float
+  relatedBore String?
+  managerId   String
+  manager     Manager  @relation(fields: [managerId], references: [id], onDelete: Cascade)
+}
+
+// Represents the manager's local stock, not the central godown
+model PipeStockItem {
+  id        String   @id @default(cuid())
+  size      Float
+  quantity  Int
+  managerId String? // Null for godown stock
+  manager   Manager? @relation(fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@unique([size, managerId])
+}
+
+
+model DieselPurchase {
+  id        String   @id @default(cuid())
+  liters    Float
+  cost      Float
+  date      DateTime
+  managerId String
+  manager   Manager  @relation(fields: [managerId], references: [id], onDelete: Cascade)
+}
+
+model DieselUsage {
+  id         String   @id @default(cuid())
+  litersUsed Float
+  purpose    String
+  date       DateTime
+  managerId  String
+  manager    Manager  @relation(fields: [managerId], references: [id], onDelete: Cascade)
+}
+
+model Agent {
+  id        String   @id @default(cuid())
+  name      String
+  managerId String
+  manager   Manager  @relation(fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@unique([name, managerId])
+}
