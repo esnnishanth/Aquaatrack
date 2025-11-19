@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
+import createFuzzy from '@/lib/algorithms/fuzzy'
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import jsPDF from 'jspdf';
@@ -112,6 +113,13 @@ export default function BoreTab({ role, bores, pipeLogs, agents, managerId, onDa
   const [agentFilter, setAgentFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const searchedBores = useMemo(() => {
+    if (!searchTerm) return bores
+    const fuzzy = createFuzzy(bores, ['boreNumber', 'agentName'])
+    return fuzzy.search(searchTerm)
+  }, [bores, searchTerm])
 
   useEffect(() => {
     setIsMounted(true);
@@ -158,7 +166,7 @@ export default function BoreTab({ role, bores, pipeLogs, agents, managerId, onDa
   }, [totalFeet, pricePerFeet, pipeEntries, amountPaidInitial]);
   
   const filteredAndSortedBores = useMemo(() => {
-    let filteredItems = [...bores];
+    let filteredItems = [...searchedBores];
 
     if (dateRange?.from) {
       filteredItems = filteredItems.filter(bore => {
@@ -650,6 +658,9 @@ export default function BoreTab({ role, bores, pipeLogs, agents, managerId, onDa
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <CardTitle className="font-headline text-base flex items-center gap-2"><List/> Bore History</CardTitle>
                   <div className="flex items-center gap-2 flex-wrap">
+                    <div className="w-full sm:w-[200px]">
+                      <Input placeholder="Search bore no. or agent" value={searchTerm} onChange={e => setSearchTerm((e.target as HTMLInputElement).value)} />
+                    </div>
                       <Popover>
                         <PopoverTrigger asChild>
                             <Button
