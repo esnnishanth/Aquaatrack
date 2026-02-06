@@ -2,6 +2,7 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
+import createFuzzy from '@/lib/algorithms/fuzzy'
 import {
   Card,
   CardContent,
@@ -72,6 +73,7 @@ export default function PipeInventoryTab({ role, pipeLogs, managerId, onDataUpda
   const [logToDelete, setLogToDelete] = useState<PipeLog | null>(null);
   const [godownPipeStock, setGodownPipeStock] = useState<PipeStockItem[]>([]);
   const [withdrawalForm, setWithdrawalForm] = useState({ size: '', quantity: '' });
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
   const [stockToAdjust, setStockToAdjust] = useState<PipeStockItem | null>(null);
@@ -213,6 +215,21 @@ export default function PipeInventoryTab({ role, pipeLogs, managerId, onDataUpda
   const validGodownStock = useMemo(() => Array.isArray(godownPipeStock) ? godownPipeStock.filter(item => typeof item.size === 'number' && !isNaN(item.size)) : [], [godownPipeStock]);
   const validPipeBalance = useMemo(() => Array.isArray(pipeBalance) ? pipeBalance.filter(item => typeof item.size === 'number' && !isNaN(item.size) && item.quantity > 0) : [], [pipeBalance]);
 
+  const filteredGodownStock = useMemo(() => {
+    if (!searchTerm) return validGodownStock
+    // create search items with label so Fuse can match numbers easily
+    const items = validGodownStock.map(i => ({ ...i, label: `${i.size}\" ${i.quantity}` }))
+    const fuzzy = createFuzzy(items, ['label'])
+    return fuzzy.search(searchTerm)
+  }, [validGodownStock, searchTerm])
+
+  const filteredPipeBalance = useMemo(() => {
+    if (!searchTerm) return validPipeBalance
+    const items = validPipeBalance.map(i => ({ ...i, label: `${i.size}\" ${i.quantity}` }))
+    const fuzzy = createFuzzy(items, ['label'])
+    return fuzzy.search(searchTerm)
+  }, [validPipeBalance, searchTerm])
+
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
@@ -222,9 +239,13 @@ export default function PipeInventoryTab({ role, pipeLogs, managerId, onDataUpda
                 <CardDescription className="text-xs">Total pipes available for all managers.</CardDescription>
             </CardHeader>
             <CardContent className="p-3 pt-0">
-                {isMounted ? (
-                    validGodownStock.length > 0 ? (
-                    <Table>
+              {isMounted ? (
+                <>
+                <div className="mb-2">
+                  <Input placeholder="Search sizes or quantities" value={searchTerm} onChange={e => setSearchTerm((e.target as HTMLInputElement).value)} />
+                </div>
+                {filteredGodownStock.length > 0 ? (
+                <Table>
                         <TableHeader>
                         <TableRow>
                             <TableHead>Size</TableHead>
@@ -232,15 +253,16 @@ export default function PipeInventoryTab({ role, pipeLogs, managerId, onDataUpda
                         </TableRow>
                         </TableHeader>
                         <TableBody>
-                        {validGodownStock.map(item => (
-                            <TableRow key={item.size}>
-                            <TableCell>{item.size}"</TableCell>
-                            <TableCell className="text-right font-medium">{item.quantity.toLocaleString()}</TableCell>
-                            </TableRow>
-                        ))}
+                  {filteredGodownStock.map(item => (
+                    <TableRow key={item.size}>
+                    <TableCell>{item.size}"</TableCell>
+                    <TableCell className="text-right font-medium">{item.quantity.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
                         </TableBody>
                     </Table>
                     ) : <p className="text-sm text-muted-foreground p-2">No pipes in godown stock.</p>
+                </>
                 ) : <Skeleton className="h-24 w-full" />}
             </CardContent>
         </Card>
@@ -252,7 +274,7 @@ export default function PipeInventoryTab({ role, pipeLogs, managerId, onDataUpda
             </CardHeader>
             <CardContent className="p-3 pt-0">
                 {isMounted ? (
-                    validPipeBalance.length > 0 ? (
+                  filteredPipeBalance.length > 0 ? (
                         <Table>
                         <TableHeader>
                             <TableRow>
@@ -262,7 +284,7 @@ export default function PipeInventoryTab({ role, pipeLogs, managerId, onDataUpda
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {validPipeBalance.map(item => (
+                      {filteredPipeBalance.map(item => (
                             <TableRow key={item.size}>
                                 <TableCell>{item.size}"</TableCell>
                                 <TableCell className="text-right font-medium">{item.quantity.toLocaleString()}</TableCell>
