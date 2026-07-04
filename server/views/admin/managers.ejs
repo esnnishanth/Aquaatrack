@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><%- include('_head') %></head>
+<body>
+  <%- include('_sidebar') %>
+  <div class="main">
+    <%- include('_header') %>
+    <div class="content">
+      <div class="page-header">
+        <h2>All Managers</h2>
+        <div class="flex gap-2">
+          <input type="text" id="searchInput" placeholder="Search by name..." style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:200px;outline:none;">
+          <button class="btn btn-primary" onclick="showAddManagerModal()">+ Add Manager</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="loading" id="loading"><div class="spinner"></div>Loading managers...</div>
+        <div id="managerContent" style="display:none">
+          <div class="stats-grid" id="miniStats"></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Name</th><th>Vehicle #</th><th>Status</th><th>Bores</th><th>Workers</th><th>Income</th><th>Expenses</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="managersBody"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="emptyState" style="display:none">
+            <div class="icon">&#128196;</div>
+            <p>No managers found</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Manager Modal -->
+  <div class="modal-overlay" id="managerModal">
+    <div class="modal">
+      <h3 id="modalTitle">Add Manager</h3>
+      <input type="hidden" id="editManagerId">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="mgrName" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Vehicle Number</label>
+          <input type="text" id="mgrVehicle" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="text" id="mgrPassword" placeholder="Leave blank to keep current">
+        </div>
+      </div>
+      <div class="form-group" id="freezeToggleGroup" style="display:none;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 0;">
+          <span style="font-size:13px;font-weight:600;color:#666;">Freeze Account</span>
+          <label class="switch" style="position:relative;display:inline-block;width:44px;height:24px;">
+            <input type="checkbox" id="mgrFrozen" style="opacity:0;width:0;height:0;">
+            <span class="slider" style="position:absolute;cursor:pointer;inset:0;background:#ccc;border-radius:24px;transition:.3s;"></span>
+          </label>
+          <span id="freezeLabel" style="font-size:12px;color:#c62828;font-weight:600;">&#9888; Frozen — manager cannot log in</span>
+        </label>
+      </div>
+      <style>
+        .switch input:checked + .slider { background: #f57c00; }
+        .switch input:checked + .slider::before { transform: translateX(20px); }
+        .switch .slider::before { content:''; position:absolute; height:18px; width:18px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.3s; }
+      </style>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('managerModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveManagerBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Freeze/Lock Reason Modal -->
+  <div class="modal-overlay" id="reasonModal">
+    <div class="modal" style="max-width:420px">
+      <h3 id="reasonModalTitle">Freeze Account</h3>
+      <input type="hidden" id="reasonActionTargetId">
+      <input type="hidden" id="reasonActionType">
+      <input type="hidden" id="reasonActionCurrentState">
+      <p style="font-size:13px;color:#666;margin-bottom:12px;" id="reasonModalDesc">Enter the reason for freezing this account:</p>
+      <div class="form-group"><label>Reason</label><textarea id="reasonText" rows="3" placeholder="Enter reason..." style="resize:vertical;"></textarea></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('reasonModal')">Cancel</button>
+        <button class="btn btn-primary" id="confirmReasonBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Modal -->
+  <div class="modal-overlay" id="historyModal">
+    <div class="modal" style="max-width:500px;">
+      <h3>Status History</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;" id="historyModalName"></p>
+      <div id="historyList" style="max-height:300px;overflow-y:auto;">
+        <div class="loading" id="historyLoading"><div class="spinner" style="width:24px;height:24px;"></div>Loading...</div>
+        <div id="historyContent" style="display:none;"></div>
+      </div>
+      <div class="btn-row"><button class="btn btn-outline" onclick="closeModal('historyModal')">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal" style="max-width:400px">
+      <h3>Delete Manager</h3>
+      <p style="color:#666;font-size:14px;">Are you sure you want to delete <strong id="deleteName"></strong>? This will permanently remove all associated data (bores, workers, expenses, etc.).</p>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('deleteModal')">Cancel</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <%- include('_scripts') %>
+  <script>
+    let managers = [];
+    let deleteTargetId = null;
+
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+    function openModal(id) { document.getElementById(id).classList.add('show'); }
+
+    function showAddManagerModal() {
+      document.getElementById('modalTitle').textContent = 'Add Manager';
+      document.getElementById('editManagerId').value = '';
+      document.getElementById('mgrName').value = '';
+      document.getElementById('mgrVehicle').value = '';
+      document.getElementById('mgrPassword').value = '';
+      document.getElementById('mgrPassword').placeholder = 'Required for new manager';
+      openModal('managerModal');
+    }
+
+    function showEditManagerModal(m) {
+      document.getElementById('modalTitle').textContent = 'Edit Manager';
+      document.getElementById('editManagerId').value = m.id;
+      document.getElementById('mgrName').value = m.name;
+      document.getElementById('mgrVehicle').value = m.vehicleNumber;
+      document.getElementById('mgrPassword').value = '';
+      document.getElementById('mgrPassword').placeholder = 'Leave blank to keep current';
+      const isFrozen = m.frozen === true;
+      document.getElementById('freezeToggleGroup').style.display = 'block';
+      document.getElementById('mgrFrozen').checked = isFrozen;
+      document.getElementById('freezeLabel').style.display = isFrozen ? 'inline' : 'none';
+      openModal('managerModal');
+    }
+
+    document.getElementById('mgrFrozen')?.addEventListener('change', function() {
+      document.getElementById('freezeLabel').style.display = this.checked ? 'inline' : 'none';
+    });
+
+    function showDeleteModal(id, name) {
+      deleteTargetId = id;
+      document.getElementById('deleteName').textContent = name;
+      openModal('deleteModal');
+    }
+
+    function renderManagers(filter) {
+      const list = filter ? managers.filter(m =>
+        m.name.toLowerCase().includes(filter) || m.vehicleNumber.toLowerCase().includes(filter)
+      ) : managers;
+
+      const tbody = document.getElementById('managersBody');
+      const empty = document.getElementById('emptyState');
+
+      if (list.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      // Mini stats
+      let totalBores = 0, totalWorkers = 0, totalIncome = 0, totalExpenses = 0;
+      list.forEach(m => {
+        const d = m.data || {};
+        totalBores += (d.bores || []).length;
+        totalWorkers += (d.workers || []).length;
+        (d.bores || []).forEach(b => (b.payments || []).forEach(p => totalIncome += p.amount));
+        (d.normalExpenses || []).forEach(e => totalExpenses += e.amount);
+        (d.labourPayments || []).forEach(l => totalExpenses += l.amount);
+      });
+
+      document.getElementById('miniStats').innerHTML = [
+        { label: 'Showing', value: list.length + ' of ' + managers.length },
+        { label: 'Bores', value: totalBores },
+        { label: 'Income', value: formatINR(totalIncome) },
+        { label: 'Expenses', value: formatINR(totalExpenses) },
+      ].map(s => `<div class="stat-card"><div class="label">${s.label}</div><div class="value">${s.value}</div></div>`).join('');
+
+      tbody.innerHTML = list.map(m => {
+        const d = m.data || {};
+        let inc = 0, exp = 0;
+        (d.bores || []).forEach(b => (b.payments || []).forEach(p => inc += p.amount));
+        (d.normalExpenses || []).forEach(e => exp += e.amount);
+        (d.labourPayments || []).forEach(l => exp += l.amount);
+        const frozen = m.frozen === true;
+        const locked = m.locked === true;
+        const statusCls = locked ? '#fce4ec' : (frozen ? '#fff8e1' : '');
+        const statusBadge = locked ? '<span class="badge" style="background:#fce4ec;color:#c62828;font-size:13px;">&#128274; Locked</span>'
+          : (frozen ? '<span class="badge badge-amber" style="font-size:13px;">&#9888; Frozen</span>'
+          : '<span class="badge badge-green">Active</span>');
+        return `<tr${statusCls ? ' style="background:' + statusCls + ';"' : ''}>
+          <td><a href="/admin/managers/${m.id}" style="color:#1565c0;text-decoration:none;font-weight:500;">${escapeHtml(m.name)}</a></td>
+          <td class="mono">${escapeHtml(m.vehicleNumber)}</td>
+          <td>${statusBadge}</td>
+          <td>${(d.bores || []).length}</td>
+          <td>${(d.workers || []).length}</td>
+          <td>${formatINR(inc)}</td>
+          <td>${formatINR(exp)}</td>
+          <td>
+            <div class="actions">
+              <button class="btn btn-sm btn-outline" onclick="showEditManagerModal(${JSON.stringify(m).replace(/"/g,'&quot;')})">Edit</button>
+              ${!locked ? '<button class="btn btn-sm ' + (frozen ? 'btn-success' : 'btn-warning') + '" onclick="showReasonModal(\'freeze\',\'' + m.id + '\',\'' + m.name + '\',' + frozen + ')">' + (frozen ? 'Unfreeze' : 'Freeze') + '</button>' : ''}
+              <button class="btn btn-sm ${locked ? 'btn-success' : 'btn-danger'}" onclick="showReasonModal('lock','${m.id}','${m.name}',${locked})">${locked ? 'Unlock' : 'Lock'}</button>
+              <button class="btn btn-sm btn-outline" onclick="showHistoryModal('${m.id}','${escapeHtml(m.name)}')">History</button>
+              <button class="btn btn-sm btn-danger" onclick="showDeleteModal('${m.id}','${escapeHtml(m.name)}')">Delete</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function showReasonModal(actionType, id, name, currentState) {
+      const isActivating = actionType === 'freeze' ? !currentState : !currentState;
+      document.getElementById('reasonActionTargetId').value = id;
+      document.getElementById('reasonActionType').value = actionType;
+      document.getElementById('reasonActionCurrentState').value = currentState ? 'true' : 'false';
+      document.getElementById('reasonText').value = '';
+      const label = isActivating
+        ? (actionType === 'freeze' ? 'Freeze' : 'Lock')
+        : (actionType === 'freeze' ? 'Unfreeze' : 'Unlock');
+      document.getElementById('reasonModalTitle').textContent = 'Reason for ' + label;
+      document.getElementById('reasonModalDesc').textContent = 'Enter the reason for ' + label.toLowerCase() + 'ing ' + name + ':';
+      document.getElementById('confirmReasonBtn').textContent = label;
+      openModal('reasonModal');
+    }
+
+    async function executeStatusChange(actionType, id, currentState, reason) {
+      const body = {};
+      if (actionType === 'freeze') body.frozen = !currentState;
+      else body.locked = !currentState;
+      body.statusReason = reason || '';
+      try {
+        await api('/api/managers/' + id, { method: 'PUT', body: JSON.stringify(body) });
+        showToast('Updated', 'success');
+        loadManagers();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function showHistoryModal(id, name) {
+      document.getElementById('historyModalName').textContent = 'History for ' + name;
+      document.getElementById('historyLoading').style.display = 'block';
+      document.getElementById('historyContent').style.display = 'none';
+      openModal('historyModal');
+      try {
+        const data = await api('/api/managers/' + id);
+        const history = data.statusHistory || [];
+        document.getElementById('historyLoading').style.display = 'none';
+        if (history.length === 0) {
+          document.getElementById('historyContent').innerHTML = '<div class="empty"><p>No status changes recorded</p></div>';
+        } else {
+          document.getElementById('historyContent').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Action</th><th>Reason</th></tr></thead><tbody>' +
+            history.slice().reverse().map(h => {
+              const badgeCls = h.action === 'locked' || h.action === 'frozen' ? 'badge-amber' : 'badge-green';
+              return '<tr><td class="text-sm">' + formatDate(h.date) + '</td><td><span class="badge ' + badgeCls + '">' + escapeHtml(h.action) + '</span></td><td class="text-sm">' + escapeHtml(h.reason || '-') + '</td></tr>';
+            }).join('') + '</tbody></table></div>';
+        }
+        document.getElementById('historyContent').style.display = 'block';
+      } catch (e) {
+        document.getElementById('historyLoading').innerHTML = '<div class="alert alert-error">' + escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    document.getElementById('confirmReasonBtn').addEventListener('click', () => {
+      const id = document.getElementById('reasonActionTargetId').value;
+      const type = document.getElementById('reasonActionType').value;
+      const currentState = document.getElementById('reasonActionCurrentState').value === 'true';
+      const reason = document.getElementById('reasonText').value.trim();
+      closeModal('reasonModal');
+      executeStatusChange(type, id, currentState, reason);
+    });
+
+    async function loadManagers() {
+      try {
+        const res = await api('/api/managers');
+        managers = res.data || [];
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('managerContent').style.display = 'block';
+        renderManagers('');
+      } catch (e) {
+        document.getElementById('loading').innerHTML = '<div class="alert alert-error">' + escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    document.getElementById('searchInput').addEventListener('input', function() {
+      renderManagers(this.value.trim().toLowerCase());
+    });
+
+    document.getElementById('saveManagerBtn').addEventListener('click', async () => {
+      const id = document.getElementById('editManagerId').value;
+      const name = document.getElementById('mgrName').value.trim();
+      const vehicle = document.getElementById('mgrVehicle').value.trim();
+      const password = document.getElementById('mgrPassword').value;
+
+      if (!name || !vehicle) { showToast('Name and vehicle number are required', 'error'); return; }
+      if (!id && !password) { showToast('Password is required for new managers', 'error'); return; }
+
+      try {
+        if (id) {
+          const body = { name, vehicleNumber: vehicle };
+          if (password) body.password = password;
+          body.frozen = document.getElementById('mgrFrozen').checked;
+          await api('/api/managers/' + id, { method: 'PUT', body: JSON.stringify(body) });
+          showToast('Manager updated', 'success');
+        } else {
+          await api('/api/managers', {
+            method: 'POST',
+            body: JSON.stringify({ name, vehicleNumber: vehicle, password, ownerId: owner?.id || null })
+          });
+          showToast('Manager added', 'success');
+        }
+        closeModal('managerModal');
+        loadManagers();
+      } catch (e) {
+        showToast(e.message, 'error');
+      }
+    });
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+      if (!deleteTargetId) return;
+      try {
+        await api('/api/managers/' + deleteTargetId, { method: 'DELETE' });
+        showToast('Manager deleted', 'success');
+        closeModal('deleteModal');
+        deleteTargetId = null;
+        loadManagers();
+      } catch (e) {
+        showToast(e.message, 'error');
+      }
+    });
+
+    loadManagers();
+  </script>
+</body>
+</html>

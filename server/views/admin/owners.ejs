@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><%- include('_head') %></head>
+<body>
+  <%- include('_sidebar') %>
+  <div class="main">
+    <%- include('_header') %>
+    <div class="content">
+      <div class="page-header">
+        <h2>All Owners</h2>
+        <div class="flex gap-2">
+          <input type="text" id="emailSearch" placeholder="Search by email..." style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:260px;outline:none;">
+          <button class="btn btn-primary" onclick="showAddOwnerModal()">+ Add Owner</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="loading" id="loading"><div class="spinner"></div>Loading owners...</div>
+        <div id="ownerContent" style="display:none">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Subscription</th><th>Managers</th><th>Created</th><th>Actions</th></tr></thead>
+              <tbody id="ownersBody"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="emptyState" style="display:none"><div class="icon">&#128100;</div><p>No owners found</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Owner Modal -->
+  <div class="modal-overlay" id="addOwnerModal">
+    <div class="modal" style="max-width:420px">
+      <h3>Add Owner</h3>
+      <div class="form-group"><label>Name</label><input type="text" id="newOwnerName"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="newOwnerEmail"></div>
+      <div class="form-group"><label>Phone</label><input type="text" id="newOwnerPhone" placeholder="10-digit number" maxlength="10"></div>
+      <div class="form-group"><label>Password</label><input type="text" id="newOwnerPassword" placeholder="Min 6 characters"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('addOwnerModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveNewOwnerBtn">Create Owner</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Change Password Modal -->
+  <div class="modal-overlay" id="passwordModal">
+    <div class="modal" style="max-width:400px">
+      <h3>Change Password</h3>
+      <input type="hidden" id="pwOwnerId">
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Changing password for <strong id="pwOwnerEmail"></strong></p>
+      <div class="form-group"><label>New Password</label><input type="text" id="newPassword" placeholder="Min 6 characters"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('passwordModal')">Cancel</button>
+        <button class="btn btn-warning" id="savePasswordBtn">Change Password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Owner Modal -->
+  <div class="modal-overlay" id="editOwnerModal">
+    <div class="modal" style="max-width:420px">
+      <h3>Edit Owner</h3>
+      <input type="hidden" id="editOwnerId">
+      <div class="form-group"><label>Name</label><input type="text" id="editOwnerName"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="editOwnerEmail"></div>
+      <div class="form-group"><label>Phone</label><input type="text" id="editOwnerPhone" maxlength="10"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('editOwnerModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveEditOwnerBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lock Owner Reason Modal -->
+  <div class="modal-overlay" id="lockOwnerModal">
+    <div class="modal" style="max-width:420px">
+      <h3 id="lockOwnerModalTitle">Lock Owner</h3>
+      <input type="hidden" id="lockOwnerTargetId">
+      <input type="hidden" id="lockOwnerCurrentState">
+      <p style="font-size:13px;color:#666;margin-bottom:12px;" id="lockOwnerModalDesc">Enter the reason for locking <strong id="lockOwnerName"></strong>:</p>
+      <div class="form-group"><label>Reason</label><textarea id="lockOwnerReason" rows="3" placeholder="Enter reason..." style="resize:vertical;"></textarea></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('lockOwnerModal')">Cancel</button>
+        <button class="btn btn-primary" id="confirmLockOwnerBtn">Lock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subscription Modal -->
+  <div class="modal-overlay" id="subscriptionModal">
+    <div class="modal" style="max-width:520px">
+      <h3>Subscription — <strong id="subOwnerEmail"></strong></h3>
+      <input type="hidden" id="subOwnerId">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 0;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:600;color:#666;">Disable Subscription Access</span>
+        <label class="switch" style="position:relative;display:inline-block;width:44px;height:24px;">
+          <input type="checkbox" id="subDisabledToggle" style="opacity:0;width:0;height:0;">
+          <span class="slider" style="position:absolute;cursor:pointer;inset:0;background:#ccc;border-radius:24px;transition:.3s;"></span>
+        </label>
+        <span id="subDisabledLabel" style="font-size:12px;color:#c62828;font-weight:600;">&#9888; Disabled &mdash; user cannot access mobile app</span>
+      </label>
+      <style>
+        .switch input:checked + .slider { background: #c62828; }
+        .switch input:checked + .slider::before { transform: translateX(20px); }
+        .switch .slider::before { content:''; position:absolute; height:18px; width:18px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.3s; }
+      </style>
+      <div class="card" style="background:#f5f7fa;padding:12px 16px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:14px;">
+          <span>Price per manager: <strong>₹<span id="subPriceDisplay">300</span></strong></span>
+          <span>Managers: <strong><span id="subCountDisplay">0</span></strong></span>
+          <span>Total: <strong>₹<span id="subTotalDisplay">0</span></strong></span>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Price per Manager (₹)</label>
+          <input type="number" id="subPricePerManager" min="0" step="10" value="300" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%;outline:none;">
+        </div>
+        <div class="form-group">
+          <label>Number of Managers</label>
+          <input type="number" id="subMaxManagers" min="0" step="1" value="0" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%;outline:none;">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Plan</label>
+        <select id="subPlan" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%;outline:none;">
+          <option value="free">Free</option>
+          <option value="basic">Basic</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="subStatus" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%;outline:none;">
+          <option value="active">Active</option>
+          <option value="expired">Expired</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Start Date</label>
+          <input type="date" id="subStartDate" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%;outline:none;">
+        </div>
+        <div class="form-group">
+          <label>End Date</label>
+          <input type="date" id="subEndDate" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%;outline:none;">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Amount (₹)</label>
+        <input type="number" id="subAmount" min="0" step="1" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%;outline:none;">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('subscriptionModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveSubscriptionBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Modal -->
+  <div class="modal-overlay" id="ownerHistoryModal">
+    <div class="modal" style="max-width:500px;">
+      <h3>Status History</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;" id="ownerHistoryModalName"></p>
+      <div id="ownerHistoryList" style="max-height:300px;overflow-y:auto;">
+        <div class="loading" id="ownerHistoryLoading"><div class="spinner" style="width:24px;height:24px;"></div>Loading...</div>
+        <div id="ownerHistoryContent" style="display:none;"></div>
+      </div>
+      <div class="btn-row"><button class="btn btn-outline" onclick="closeModal('ownerHistoryModal')">Close</button></div>
+    </div>
+  </div>
+
+  <%- include('_scripts') %>
+  <script>
+    let owners = [];
+
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    function openModal(id) { document.getElementById(id).classList.add('show'); }
+    function showAddOwnerModal() { openModal('addOwnerModal'); document.getElementById('addOwnerModal').querySelector('h3').textContent = 'Add Owner'; document.getElementById('newOwnerName').value = ''; document.getElementById('newOwnerEmail').value = ''; document.getElementById('newOwnerPhone').value = ''; document.getElementById('newOwnerPassword').value = ''; }
+
+    function renderOwners(list) {
+      const tbody = document.getElementById('ownersBody');
+      const empty = document.getElementById('emptyState');
+      if (list.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      tbody.innerHTML = list.map(o => {
+        const locked = o.locked === true;
+        const sub = o.subscription || {};
+        const plan = sub.plan || 'free';
+        const subStatus = sub.status || 'active';
+        const maxM = o.maxManagers || 0;
+        const usedM = o.managersUsed || 0;
+        const remaining = maxM > 0 ? maxM - usedM : 'Unlimited';
+        const atLimit = usedM >= maxM;
+        const statusBadge = locked ? '<span class="badge" style="background:#fce4ec;color:#c62828;font-size:13px;">&#128274; Locked</span>'
+          : '<span class="badge badge-green">Active</span>';
+        const subBadge = plan === 'premium' ? '<span class="badge" style="background:#fff3e0;color:#e65100;font-size:13px;">Premium</span>'
+          : plan === 'basic' ? '<span class="badge" style="background:#e3f2fd;color:#1565c0;font-size:13px;">Basic</span>'
+          : '<span class="badge badge-green" style="font-size:13px;">Free</span>';
+        const mgrDisplay = atLimit
+          ? '<span style="color:#c62828;font-weight:600;">' + usedM + '/' + maxM + '</span>'
+          : '<span>' + usedM + '/' + maxM + '</span>';
+        const lockedCls = locked ? ' style="background:#fce4ec;"' : '';
+        return `<tr${lockedCls}>
+        <td><a href="/admin/owners/${o._id || o.id}"${locked ? ' style="color:#c62828;"' : ' style="color:#1565c0;"'}>${escapeHtml(o.name)}</a></td>
+        <td>${escapeHtml(o.email)}</td>
+        <td>${o.phone ? escapeHtml(o.phone) : '-'}</td>
+        <td>${statusBadge}</td>
+        <td>${subBadge}</td>
+        <td style="text-align:center;font-size:13px;">${mgrDisplay}</td>
+        <td class="text-sm text-muted">${o.createdAt ? formatDate(o.createdAt) : '-'}</td>
+        <td><div class="actions">
+          <button class="btn btn-sm btn-outline" onclick="showEditOwner('${o._id || o.id}')">Edit</button>
+          <button class="btn btn-sm btn-warning" onclick="showPasswordModal('${o._id || o.id}','${escapeHtml(o.email)}')">Change Password</button>
+          <button class="btn btn-sm ${locked ? 'btn-success' : 'btn-danger'}" onclick="showLockOwnerModal('${o._id || o.id}','${escapeHtml(o.email)}',${locked})">${locked ? 'Unlock' : 'Lock'}</button>
+          <button class="btn btn-sm btn-outline" onclick="showOwnerHistoryModal('${o._id || o.id}','${escapeHtml(o.name)}')">History</button>
+          <button class="btn btn-sm btn-primary" onclick="showSubscriptionModal('${o._id || o.id}','${escapeHtml(o.email)}','${escapeHtml(plan)}','${escapeHtml(subStatus)}',${maxM},${o.pricePerManager||300})">Subscription</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteOwner('${o._id || o.id}','${escapeHtml(o.name)}')">Delete</button>
+        </div></td>
+      </tr>`}).join('');
+    }
+
+    async function loadOwners() {
+      try {
+        const data = await api('/api/owners');
+        owners = Array.isArray(data) ? data : [];
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('ownerContent').style.display = 'block';
+        renderOwners(owners);
+      } catch (e) {
+        document.getElementById('loading').innerHTML = '<div class="alert alert-error">' + escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    // Email search filter
+    document.getElementById('emailSearch').addEventListener('input', function() {
+      const q = this.value.trim().toLowerCase();
+      renderOwners(q ? owners.filter(o => o.email.toLowerCase().includes(q) || o.name.toLowerCase().includes(q) || (o.phone || '').includes(q)) : owners);
+    });
+
+    // Add owner
+    document.getElementById('saveNewOwnerBtn').addEventListener('click', async () => {
+      const name = document.getElementById('newOwnerName').value.trim();
+      const email = document.getElementById('newOwnerEmail').value.trim();
+      const phone = document.getElementById('newOwnerPhone').value.trim();
+      const password = document.getElementById('newOwnerPassword').value;
+      if (!name || !email || !phone || !password) { showToast('All fields required', 'error'); return; }
+      if (password.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+      if (!/^\d{10}$/.test(phone)) { showToast('Phone must be a 10-digit number', 'error'); return; }
+      try {
+        await api('/api/auth/owner/signup', { method: 'POST', body: JSON.stringify({ name, email, phone, password }) });
+        showToast('Owner created', 'success');
+        closeModal('addOwnerModal');
+        loadOwners();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // Change password
+    function showPasswordModal(id, email) {
+      document.getElementById('pwOwnerId').value = id;
+      document.getElementById('pwOwnerEmail').textContent = email;
+      document.getElementById('newPassword').value = '';
+      openModal('passwordModal');
+    }
+
+    document.getElementById('savePasswordBtn').addEventListener('click', async () => {
+      const id = document.getElementById('pwOwnerId').value;
+      const password = document.getElementById('newPassword').value;
+      if (!password || password.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+      try {
+        await api('/api/owners/' + id, { method: 'PUT', body: JSON.stringify({ password }) });
+        showToast('Password changed', 'success');
+        closeModal('passwordModal');
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // Edit owner
+    async function showEditOwner(id) {
+      const o = owners.find(x => (x._id || x.id) === id);
+      if (!o) return;
+      document.getElementById('editOwnerId').value = id;
+      document.getElementById('editOwnerName').value = o.name;
+      document.getElementById('editOwnerEmail').value = o.email;
+      document.getElementById('editOwnerPhone').value = o.phone || '';
+      openModal('editOwnerModal');
+    }
+
+    document.getElementById('saveEditOwnerBtn').addEventListener('click', async () => {
+      const id = document.getElementById('editOwnerId').value;
+      const name = document.getElementById('editOwnerName').value.trim();
+      const email = document.getElementById('editOwnerEmail').value.trim();
+      const phone = document.getElementById('editOwnerPhone').value.trim();
+      if (!name || !email) { showToast('Name and email required', 'error'); return; }
+      if (phone && !/^\d{10}$/.test(phone)) { showToast('Phone must be a 10-digit number', 'error'); return; }
+      try {
+        await api('/api/owners/' + id, { method: 'PUT', body: JSON.stringify({ name, email, phone }) });
+        showToast('Owner updated', 'success');
+        closeModal('editOwnerModal');
+        loadOwners();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // Lock / Unlock owner
+    function showLockOwnerModal(id, email, currentState) {
+      const isActivating = !currentState;
+      document.getElementById('lockOwnerTargetId').value = id;
+      document.getElementById('lockOwnerCurrentState').value = currentState ? 'true' : 'false';
+      document.getElementById('lockOwnerName').textContent = email;
+      document.getElementById('lockOwnerReason').value = '';
+      const label = isActivating ? 'Lock' : 'Unlock';
+      document.getElementById('lockOwnerModalTitle').textContent = 'Reason for ' + label;
+      document.getElementById('lockOwnerModalDesc').textContent = 'Enter the reason for ' + label.toLowerCase() + 'ing ' + email + ':';
+      document.getElementById('confirmLockOwnerBtn').textContent = label;
+      openModal('lockOwnerModal');
+    }
+
+    document.getElementById('confirmLockOwnerBtn').addEventListener('click', async () => {
+      const id = document.getElementById('lockOwnerTargetId').value;
+      const currentState = document.getElementById('lockOwnerCurrentState').value === 'true';
+      const reason = document.getElementById('lockOwnerReason').value.trim();
+      closeModal('lockOwnerModal');
+      try {
+        await api('/api/owners/' + id, { method: 'PUT', body: JSON.stringify({ locked: !currentState, statusReason: reason }) });
+        showToast('Owner ' + (!currentState ? 'locked' : 'unlocked'), 'success');
+        loadOwners();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // Subscription
+    function recalcSubTotal() {
+      const price = Number(document.getElementById('subPricePerManager').value) || 0;
+      const count = Number(document.getElementById('subMaxManagers').value) || 0;
+      const total = price * count;
+      document.getElementById('subPriceDisplay').textContent = price;
+      document.getElementById('subCountDisplay').textContent = count;
+      document.getElementById('subTotalDisplay').textContent = total;
+    }
+
+    document.getElementById('subPricePerManager').addEventListener('input', recalcSubTotal);
+    document.getElementById('subMaxManagers').addEventListener('input', recalcSubTotal);
+
+    function showSubscriptionModal(id, email, plan, status, maxManagers, pricePerManager) {
+      document.getElementById('subOwnerId').value = id;
+      document.getElementById('subOwnerEmail').textContent = email;
+      document.getElementById('subPlan').value = plan;
+      document.getElementById('subStatus').value = status;
+      document.getElementById('subMaxManagers').value = maxManagers || 0;
+      document.getElementById('subPricePerManager').value = pricePerManager || 300;
+      document.getElementById('subStartDate').value = '';
+      document.getElementById('subEndDate').value = '';
+      document.getElementById('subAmount').value = '0';
+      recalcSubTotal();
+      // Fetch current owner data to populate dates and toggle
+      api('/api/owners/' + id).then(o => {
+        const s = o.subscription || {};
+        if (s.startDate) document.getElementById('subStartDate').value = s.startDate.slice(0,10);
+        if (s.endDate) document.getElementById('subEndDate').value = s.endDate.slice(0,10);
+        if (s.amount) document.getElementById('subAmount').value = s.amount;
+        const isDisabled = o.subscriptionDisabled === true;
+        document.getElementById('subDisabledToggle').checked = isDisabled;
+        document.getElementById('subDisabledLabel').style.display = isDisabled ? 'inline' : 'none';
+      }).catch(() => {});
+      openModal('subscriptionModal');
+    }
+
+    document.getElementById('subDisabledToggle').addEventListener('change', function() {
+      document.getElementById('subDisabledLabel').style.display = this.checked ? 'inline' : 'none';
+    });
+
+    // Owner history
+    async function showOwnerHistoryModal(id, name) {
+      document.getElementById('ownerHistoryModalName').textContent = 'History for ' + name;
+      document.getElementById('ownerHistoryLoading').style.display = 'block';
+      document.getElementById('ownerHistoryContent').style.display = 'none';
+      openModal('ownerHistoryModal');
+      try {
+        const o = await api('/api/owners/' + id);
+        const history = o.statusHistory || [];
+        document.getElementById('ownerHistoryLoading').style.display = 'none';
+        if (history.length === 0) {
+          document.getElementById('ownerHistoryContent').innerHTML = '<div class="empty"><p>No status changes recorded</p></div>';
+        } else {
+          document.getElementById('ownerHistoryContent').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Action</th><th>Reason</th></tr></thead><tbody>' +
+            history.slice().reverse().map(h => {
+              const badgeCls = h.action === 'locked' ? 'badge-amber' : 'badge-green';
+              return '<tr><td class="text-sm">' + formatDate(h.date) + '</td><td><span class="badge ' + badgeCls + '">' + escapeHtml(h.action) + '</span></td><td class="text-sm">' + escapeHtml(h.reason || '-') + '</td></tr>';
+            }).join('') + '</tbody></table></div>';
+        }
+        document.getElementById('ownerHistoryContent').style.display = 'block';
+      } catch (e) {
+        document.getElementById('ownerHistoryLoading').innerHTML = '<div class="alert alert-error">' + escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    document.getElementById('saveSubscriptionBtn').addEventListener('click', async () => {
+      const id = document.getElementById('subOwnerId').value;
+      const plan = document.getElementById('subPlan').value;
+      const status = document.getElementById('subStatus').value;
+      const startDate = document.getElementById('subStartDate').value;
+      const endDate = document.getElementById('subEndDate').value;
+      const amount = Number(document.getElementById('subAmount').value) || 0;
+      const maxManagers = Number(document.getElementById('subMaxManagers').value) || 0;
+      const pricePerManager = Number(document.getElementById('subPricePerManager').value) || 0;
+      const subscriptionDisabled = document.getElementById('subDisabledToggle').checked;
+      const sub = { plan, status, amount };
+      if (startDate) sub.startDate = new Date(startDate).toISOString();
+      if (endDate) sub.endDate = new Date(endDate).toISOString();
+      try {
+        await api('/api/owners/' + id, { method: 'PUT', body: JSON.stringify({ subscription: sub, maxManagers, pricePerManager, subscriptionDisabled }) });
+        showToast('Subscription updated', 'success');
+        closeModal('subscriptionModal');
+        loadOwners();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // Delete owner
+    async function deleteOwner(id, name) {
+      if (!confirm('Delete owner "' + name + '" and all associated managers?')) return;
+      try {
+        // Delete all managers under this owner first
+        const mgrs = await api('/api/managers?ownerId=' + id);
+        if (mgrs.data) {
+          for (const m of mgrs.data) {
+            await api('/api/managers/' + m.id, { method: 'DELETE' }).catch(() => {});
+          }
+        }
+        await api('/api/owners/' + id, { method: 'DELETE' });
+        showToast('Owner deleted', 'success');
+        loadOwners();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    loadOwners();
+  </script>
+</body>
+</html>

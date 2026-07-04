@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><%- include('_head') %></head>
+<body>
+  <%- include('_sidebar') %>
+  <div class="main">
+    <%- include('_header') %>
+    <div class="content">
+      <div id="loading" class="loading"><div class="spinner"></div>Loading manager data...</div>
+      <div id="detailContent" style="display:none">
+        <a href="/admin/managers" class="btn btn-sm btn-outline mb-2">&larr; Back to Managers</a>
+
+        <div class="card">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 style="font-size:20px;font-weight:600;color:#1a1a2e;" id="managerName"></h2>
+              <p class="text-sm text-muted" id="managerVehicle"></p>
+              <p class="text-sm" id="managerFrozenStatus" style="display:none;margin-top:4px;"></p>
+            </div>
+            <div class="flex gap-2" style="align-items:center;flex-wrap:wrap;">
+              <button class="btn btn-sm" id="detailFreezeBtn" style="display:none;"></button>
+              <button class="btn btn-sm" id="detailLockBtn" style="display:none;"></button>
+              <button class="btn btn-sm btn-outline" id="editManagerBtn">Edit</button>
+              <button class="btn btn-sm btn-danger" id="deleteManagerBtn">Delete</button>
+            </div>
+          </div>
+        </div>
+      <style>
+        .switch input:checked + .slider { background: #f57c00; }
+        .switch input:checked + .slider::before { transform: translateX(16px); }
+        .switch .slider::before { content:''; position:absolute; height:14px; width:14px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.3s; }
+      </style>
+
+        <div class="stats-grid" id="detailStats"></div>
+
+        <div class="tabs" id="detailTabs">
+          <button class="active" data-tab="bores">Bores (<span id="boreCount">0</span>)</button>
+          <button data-tab="workers">Workers (<span id="workerCount">0</span>)</button>
+          <button data-tab="expenses">Expenses (<span id="expenseCount">0</span>)</button>
+          <button data-tab="income">Income</button>
+          <button data-tab="pipe">Pipe Stock</button>
+          <button data-tab="agents">Agents (<span id="agentCount">0</span>)</button>
+        </div>
+
+        <div id="tabContent">
+          <div class="card" id="tab-bores"><div class="loading"><div class="spinner"></div></div></div>
+          <div class="card" id="tab-workers" style="display:none"><div class="loading"><div class="spinner"></div></div></div>
+          <div class="card" id="tab-expenses" style="display:none"><div class="loading"><div class="spinner"></div></div></div>
+          <div class="card" id="tab-income" style="display:none"><div class="loading"><div class="spinner"></div></div></div>
+          <div class="card" id="tab-pipe" style="display:none"><div class="loading"><div class="spinner"></div></div></div>
+          <div class="card" id="tab-agents" style="display:none"><div class="loading"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Manager Modal -->
+  <div class="modal-overlay" id="editMgrModal">
+    <div class="modal">
+      <h3>Edit Manager</h3>
+      <div class="form-group"><label>Name</label><input type="text" id="editMgrName"></div>
+      <div class="form-group"><label>Vehicle Number</label><input type="text" id="editMgrVehicle"></div>
+      <div class="form-group"><label>New Password (leave blank to keep)</label><input type="text" id="editMgrPassword"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('editMgrModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveEditMgrBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Bore Modal -->
+  <div class="modal-overlay" id="boreModal">
+    <div class="modal">
+      <h3 id="boreModalTitle">Edit Bore</h3>
+      <input type="hidden" id="editBoreId">
+      <div class="form-row">
+        <div class="form-group"><label>Bore Number</label><input type="text" id="boreNumber"></div>
+        <div class="form-group"><label>Date</label><input type="date" id="boreDate"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Total Feet</label><input type="number" id="boreFeet" step="0.1"></div>
+        <div class="form-group"><label>Price Per Feet (&pi;)</label><input type="number" id="borePricePerFeet" step="0.1"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Total Bill (&pi;)</label><input type="number" id="boreTotalBill" step="0.1"></div>
+        <div class="form-group"><label>Agent Name</label><input type="text" id="boreAgentName"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('boreModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveBoreBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Bore Modal -->
+  <div class="modal-overlay" id="addBoreModal">
+    <div class="modal">
+      <h3>Add Bore</h3>
+      <div class="form-row">
+        <div class="form-group"><label>Bore Number*</label><input type="text" id="addBoreNumber"></div>
+        <div class="form-group"><label>Date*</label><input type="date" id="addBoreDate"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Total Feet</label><input type="number" id="addBoreFeet" step="0.1" value="0"></div>
+        <div class="form-group"><label>Price Per Feet (&pi;)</label><input type="number" id="addBorePricePerFeet" step="0.1" value="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Agent Commission/Feet (&pi;)</label><input type="number" id="addBoreAgentCommFeet" step="0.1" value="0"></div>
+        <div class="form-group"><label>Agent Commission/PipeFoot (&pi;)</label><input type="number" id="addBoreAgentCommPipe" step="0.1" value="0"></div>
+      </div>
+      <div class="form-group"><label>Agent Name</label><input type="text" id="addBoreAgentName"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('addBoreModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveAddBoreBtn">Add Bore</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Worker Modal -->
+  <div class="modal-overlay" id="workerModal">
+    <div class="modal">
+      <h3 id="workerModalTitle">Edit Worker</h3>
+      <input type="hidden" id="editWorkerId">
+      <div class="form-group"><label>Name</label><input type="text" id="workerName"></div>
+      <div class="form-group"><label>Place</label><input type="text" id="workerPlace"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Monthly Salary (&pi;)</label><input type="number" id="workerSalary" step="0.1"></div>
+        <div class="form-group"><label>Months Worked</label><input type="number" id="workerMonths"></div>
+      </div>
+      <div class="form-group"><label>Amount Paid (&pi;)</label><input type="number" id="workerPaid" step="0.1"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('workerModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveWorkerBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Worker Modal -->
+  <div class="modal-overlay" id="addWorkerModal">
+    <div class="modal">
+      <h3>Add Worker</h3>
+      <div class="form-group"><label>Name*</label><input type="text" id="addWorkerName"></div>
+      <div class="form-group"><label>Place</label><input type="text" id="addWorkerPlace"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Monthly Salary (&pi;)</label><input type="number" id="addWorkerSalary" step="0.1" value="0"></div>
+        <div class="form-group"><label>Months Worked</label><input type="number" id="addWorkerMonths" value="12"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('addWorkerModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveAddWorkerBtn">Add Worker</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expense Modal -->
+  <div class="modal-overlay" id="expenseModal">
+    <div class="modal" style="max-width:400px">
+      <h3>Add Expense</h3>
+      <div class="form-group"><label>Description*</label><input type="text" id="expenseDesc"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Amount (&pi;)*</label><input type="number" id="expenseAmount" step="0.1"></div>
+        <div class="form-group"><label>Date*</label><input type="date" id="expenseDate"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('expenseModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveExpenseBtn">Add Expense</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipe Stock Modal -->
+  <div class="modal-overlay" id="pipeModal">
+    <div class="modal" style="max-width:400px">
+      <h3>Update Pipe Stock</h3>
+      <div class="form-group"><label>Size (inches)*</label><input type="number" id="pipeSize" step="0.1"></div>
+      <div class="form-group"><label>Quantity*</label><input type="number" id="pipeQty"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('pipeModal')">Cancel</button>
+        <button class="btn btn-primary" id="savePipeBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Modal -->
+  <div class="modal-overlay" id="agentModal">
+    <div class="modal" style="max-width:400px">
+      <h3 id="agentModalTitle">Edit Agent</h3>
+      <input type="hidden" id="editAgentId">
+      <div class="form-group"><label>Name*</label><input type="text" id="agentName"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('agentModal')">Cancel</button>
+        <button class="btn btn-primary" id="saveAgentBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div class="modal-overlay" id="deleteConfirmModal">
+    <div class="modal" style="max-width:400px">
+      <h3>Confirm Delete</h3>
+      <p style="color:#666;font-size:14px;" id="deleteConfirmMsg">Are you sure?</p>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('deleteConfirmModal')">Cancel</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn2">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <%- include('_scripts') %>
+  <script>
+    const MANAGER_ID = '<%= managerId %>';
+    let managerData = null;
+    let deleteAction = null;
+
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    function openModal(id) { document.getElementById(id).classList.add('show'); }
+
+    // Tab switching
+    document.querySelectorAll('#detailTabs button').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('#detailTabs button').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        document.querySelectorAll('#tabContent > .card').forEach(c => c.style.display = 'none');
+        document.getElementById('tab-' + this.dataset.tab).style.display = 'block';
+        loadTab(this.dataset.tab);
+      });
+    });
+
+    function loadTab(tab) {
+      if (!managerData) return;
+      switch(tab) {
+        case 'bores': renderBores(); break;
+        case 'workers': renderWorkers(); break;
+        case 'expenses': renderExpenses(); break;
+        case 'income': renderIncome(); break;
+        case 'pipe': renderPipe(); break;
+        case 'agents': renderAgents(); break;
+      }
+    }
+
+    async function loadManager() {
+      try {
+        const res = await api('/api/managers/' + MANAGER_ID);
+        managerData = res;
+
+        document.getElementById('managerName').textContent = managerData.name;
+        document.getElementById('managerVehicle').textContent = 'Vehicle: ' + managerData.vehicleNumber + (managerData.ownerId ? ' | Owner: ' + managerData.ownerId : '');
+        const isFrozen = managerData.frozen === true;
+        const isLocked = managerData.locked === true;
+        const statusEl = document.getElementById('managerFrozenStatus');
+        if (isLocked) {
+          statusEl.innerHTML = '<span class="badge" style="background:#fce4ec;color:#c62828;">&#128274; Locked — cannot log in, hidden from owner</span>';
+          statusEl.style.display = 'block';
+        } else if (isFrozen) {
+          statusEl.innerHTML = '<span class="badge badge-amber">&#9888; Frozen — cannot log in (owner can view read-only)</span>';
+          statusEl.style.display = 'block';
+        } else {
+          statusEl.style.display = 'none';
+        }
+        const freezeBtn = document.getElementById('detailFreezeBtn');
+        freezeBtn.style.display = 'inline-flex';
+        freezeBtn.className = 'btn btn-sm ' + (isFrozen ? 'btn-success' : 'btn-warning');
+        freezeBtn.textContent = isFrozen ? 'Unfreeze' : 'Freeze';
+        freezeBtn.onclick = () => toggleDetailFreeze(isFrozen);
+        const lockBtn = document.getElementById('detailLockBtn');
+        lockBtn.style.display = 'inline-flex';
+        lockBtn.className = 'btn btn-sm ' + (isLocked ? 'btn-success' : 'btn-danger');
+        lockBtn.textContent = isLocked ? 'Unlock' : 'Lock';
+        lockBtn.onclick = () => toggleDetailLock(isLocked);
+
+        const d = managerData.data || {};
+        const bores = d.bores || [];
+        const workers = d.workers || [];
+        const expenses = d.normalExpenses || [];
+        const labourPayments = d.labourPayments || [];
+        const agents = d.agents || [];
+        const pipeStock = d.pipeStock || [];
+
+        document.getElementById('boreCount').textContent = bores.length;
+        document.getElementById('workerCount').textContent = workers.length;
+        document.getElementById('expenseCount').textContent = expenses.length + labourPayments.length;
+        document.getElementById('agentCount').textContent = agents.length;
+
+        let totalIncome = 0, totalExpenses = 0;
+        bores.forEach(b => (b.payments || []).forEach(p => totalIncome += p.amount));
+        expenses.forEach(e => totalExpenses += e.amount);
+        labourPayments.forEach(l => totalExpenses += l.amount);
+        const totalBill = bores.reduce((s, b) => s + (b.totalBill || 0), 0);
+
+        document.getElementById('detailStats').innerHTML = [
+          { label: 'Total Bores', value: bores.length },
+          { label: 'Total Bill', value: formatINR(totalBill) },
+          { label: 'Total Income', value: formatINR(totalIncome) },
+          { label: 'Balance', value: formatINR(totalBill - totalIncome), color: totalBill > totalIncome ? '#c62828' : '#2e7d32' },
+          { label: 'Total Expenses', value: formatINR(totalExpenses) },
+          { label: 'Net Profit', value: formatINR(totalIncome - totalExpenses), color: totalIncome >= totalExpenses ? '#2e7d32' : '#c62828' },
+          { label: 'Workers', value: workers.length },
+          { label: 'Pipe Items', value: pipeStock.length },
+        ].map(s => `<div class="stat-card"><div class="label">${s.label}</div><div class="value"${s.color ? ' style="color:'+s.color+'"' : ''}>${s.value}</div></div>`).join('');
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('detailContent').style.display = 'block';
+        loadTab('bores');
+      } catch (e) {
+        document.getElementById('loading').innerHTML = '<div class="alert alert-error">Failed to load: ' + escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    // ── Bores Tab ──
+    function renderBores() {
+      const d = managerData.data || {};
+      const bores = d.bores || [];
+      const el = document.getElementById('tab-bores');
+      if (bores.length === 0) {
+        el.innerHTML = '<div class="empty"><div class="icon">&#128228;</div><p>No bores found</p></div>';
+        return;
+      }
+      el.innerHTML = '<div class="flex items-center justify-between mb-2"><span style="font-weight:600;font-size:14px;">' + bores.length + ' Bores</span><button class="btn btn-sm btn-primary" onclick="openModal(\'addBoreModal\')">+ Add Bore</button></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Bore #</th><th>Feet</th><th>Price/ft</th><th>Total Bill</th><th>Payments</th><th>Balance</th><th>Agent</th><th>Commission</th><th>Actions</th></tr></thead><tbody>' +
+        bores.map(b => {
+          const totalPayments = (b.payments || []).reduce((s, p) => s + p.amount, 0);
+          const balance = (b.totalBill || 0) - totalPayments;
+          return '<tr><td>' + formatDate(b.date) + '</td><td class="mono">' + escapeHtml(b.boreNumber) + '</td><td>' + b.totalFeet + '</td><td>' + formatINR(b.pricePerFeet) + '</td><td>' + formatINR(b.totalBill) + '</td><td>' + formatINR(totalPayments) + '</td><td style="color:' + (balance > 0 ? '#c62828' : '#2e7d32') + ';font-weight:600;">' + formatINR(balance) + '</td><td>' + escapeHtml(b.agentName || '-') + '</td><td>' + (b.commissionSettled ? '<span class="badge badge-green">Settled</span>' : '<span class="badge badge-amber">Pending</span>') + '</td><td><div class="actions"><button class="btn btn-sm btn-outline" onclick="editBore(\'' + b.id + '\')">Edit</button><button class="btn btn-sm btn-danger" onclick="confirmDelete(\'bore\',\'' + b.id + '\')">Del</button></div></td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+
+    function editBore(id) {
+      const b = (managerData.data?.bores || []).find(x => x.id === id);
+      if (!b) return;
+      document.getElementById('editBoreId').value = id;
+      document.getElementById('boreNumber').value = b.boreNumber;
+      document.getElementById('boreDate').value = b.date ? b.date.slice(0,10) : '';
+      document.getElementById('boreFeet').value = b.totalFeet;
+      document.getElementById('borePricePerFeet').value = b.pricePerFeet;
+      document.getElementById('boreTotalBill').value = b.totalBill;
+      document.getElementById('boreAgentName').value = b.agentName || '';
+      document.getElementById('boreModalTitle').textContent = 'Edit Bore - ' + b.boreNumber;
+      openModal('boreModal');
+    }
+
+    document.getElementById('saveBoreBtn').addEventListener('click', async () => {
+      const id = document.getElementById('editBoreId').value;
+      try {
+        await api('/api/managers/' + MANAGER_ID + '/bores/' + id, {
+          method: 'PUT',
+          body: JSON.stringify({
+            boreNumber: document.getElementById('boreNumber').value,
+            date: document.getElementById('boreDate').value,
+            totalFeet: Number(document.getElementById('boreFeet').value) || 0,
+            pricePerFeet: Number(document.getElementById('borePricePerFeet').value) || 0,
+            totalBill: Number(document.getElementById('boreTotalBill').value) || 0,
+            agentName: document.getElementById('boreAgentName').value,
+          })
+        });
+        showToast('Bore updated', 'success');
+        closeModal('boreModal');
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    document.getElementById('saveAddBoreBtn').addEventListener('click', async () => {
+      try {
+        await api('/api/managers/' + MANAGER_ID + '/bores', {
+          method: 'POST',
+          body: JSON.stringify({
+            boreNumber: document.getElementById('addBoreNumber').value,
+            date: document.getElementById('addBoreDate').value,
+            totalFeet: Number(document.getElementById('addBoreFeet').value) || 0,
+            pricePerFeet: Number(document.getElementById('addBorePricePerFeet').value) || 0,
+            agentCommissionPerFeet: Number(document.getElementById('addBoreAgentCommFeet').value) || 0,
+            agentCommissionPerPipeFoot: Number(document.getElementById('addBoreAgentCommPipe').value) || 0,
+            agentName: document.getElementById('addBoreAgentName').value,
+          })
+        });
+        showToast('Bore added', 'success');
+        closeModal('addBoreModal');
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // ── Workers Tab ──
+    function renderWorkers() {
+      const d = managerData.data || {};
+      const workers = d.workers || [];
+      const el = document.getElementById('tab-workers');
+      if (workers.length === 0) {
+        el.innerHTML = '<div class="empty"><div class="icon">&#128101;</div><p>No workers found</p><button class="btn btn-sm btn-primary mt-4" onclick="openModal(\'addWorkerModal\')">+ Add Worker</button></div>';
+        return;
+      }
+      el.innerHTML = '<div class="flex items-center justify-between mb-2"><span style="font-weight:600;font-size:14px;">' + workers.length + ' Workers</span><button class="btn btn-sm btn-primary" onclick="openModal(\'addWorkerModal\')">+ Add Worker</button></div><div class="table-wrap"><table><thead><tr><th>Name</th><th>Place</th><th>Monthly &pi;</th><th>Months</th><th>Amount Paid</th><th>Due</th><th>Absences</th><th>Actions</th></tr></thead><tbody>' +
+        workers.map(w => {
+          const due = (w.monthlySalary * w.monthsWorked) - w.amountPaid;
+          return '<tr><td style="font-weight:500;">' + escapeHtml(w.name) + '</td><td>' + escapeHtml(w.place || '-') + '</td><td>' + formatINR(w.monthlySalary) + '</td><td>' + w.monthsWorked + '</td><td>' + formatINR(w.amountPaid) + '</td><td style="color:' + (due > 0 ? '#c62828' : '#2e7d32') + ';font-weight:600;">' + formatINR(Math.max(0, due)) + '</td><td>' + (w.absenceRanges || []).length + '</td><td><div class="actions"><button class="btn btn-sm btn-outline" onclick="editWorker(\'' + w.id + '\')">Edit</button><button class="btn btn-sm btn-danger" onclick="confirmDelete(\'worker\',\'' + w.id + '\')">Del</button></div></td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+
+    function editWorker(id) {
+      const w = (managerData.data?.workers || []).find(x => x.id === id);
+      if (!w) return;
+      document.getElementById('editWorkerId').value = id;
+      document.getElementById('workerName').value = w.name;
+      document.getElementById('workerPlace').value = w.place || '';
+      document.getElementById('workerSalary').value = w.monthlySalary;
+      document.getElementById('workerMonths').value = w.monthsWorked;
+      document.getElementById('workerPaid').value = w.amountPaid;
+      document.getElementById('workerModalTitle').textContent = 'Edit Worker - ' + w.name;
+      openModal('workerModal');
+    }
+
+    document.getElementById('saveWorkerBtn').addEventListener('click', async () => {
+      const id = document.getElementById('editWorkerId').value;
+      try {
+        await api('/api/managers/' + MANAGER_ID + '/workers/' + id, {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: document.getElementById('workerName').value,
+            place: document.getElementById('workerPlace').value,
+            monthlySalary: Number(document.getElementById('workerSalary').value) || 0,
+            monthsWorked: Number(document.getElementById('workerMonths').value) || 0,
+            amountPaid: Number(document.getElementById('workerPaid').value) || 0,
+          })
+        });
+        showToast('Worker updated', 'success');
+        closeModal('workerModal');
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    document.getElementById('saveAddWorkerBtn').addEventListener('click', async () => {
+      try {
+        await api('/api/managers/' + MANAGER_ID + '/workers', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: document.getElementById('addWorkerName').value,
+            place: document.getElementById('addWorkerPlace').value,
+            monthlySalary: Number(document.getElementById('addWorkerSalary').value) || 0,
+            monthsWorked: Number(document.getElementById('addWorkerMonths').value) || 0,
+          })
+        });
+        showToast('Worker added', 'success');
+        closeModal('addWorkerModal');
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // ── Expenses Tab ──
+    function renderExpenses() {
+      const d = managerData.data || {};
+      const expenses = d.normalExpenses || [];
+      const labourPayments = d.labourPayments || [];
+      const workers = d.workers || [];
+      const el = document.getElementById('tab-expenses');
+      const total = expenses.reduce((s, e) => s + e.amount, 0) + labourPayments.reduce((s, l) => s + l.amount, 0);
+      if (expenses.length === 0 && labourPayments.length === 0) {
+        el.innerHTML = '<div class="empty"><div class="icon">&#128200;</div><p>No expenses found</p><button class="btn btn-sm btn-primary mt-4" onclick="openModal(\'expenseModal\')">+ Add Expense</button></div>';
+        return;
+      }
+
+      const workerMap = {};
+      workers.forEach(w => workerMap[w.id] = w.name);
+
+      el.innerHTML = '<div class="flex items-center justify-between mb-2"><span style="font-weight:600;font-size:14px;">Total Expenses: ' + formatINR(total) + '</span><button class="btn btn-sm btn-primary" onclick="openModal(\'expenseModal\')">+ Add Expense</button></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description / Worker</th><th>Amount</th></tr></thead><tbody>' +
+        expenses.map(e => '<tr><td>' + formatDate(e.date) + '</td><td><span class="badge badge-blue">Normal</span></td><td>' + escapeHtml(e.description) + '</td><td style="color:#c62828">' + formatINR(e.amount) + '</td></tr>').join('') +
+        labourPayments.map(l => '<tr><td>' + formatDate(l.date) + '</td><td><span class="badge badge-amber">Labour</span></td><td>' + escapeHtml(workerMap[l.workerId] || l.workerId) + '</td><td style="color:#c62828">' + formatINR(l.amount) + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+
+    document.getElementById('saveExpenseBtn').addEventListener('click', async () => {
+      try {
+        await api('/api/managers/' + MANAGER_ID + '/normal-expenses', {
+          method: 'POST',
+          body: JSON.stringify({
+            description: document.getElementById('expenseDesc').value,
+            amount: Number(document.getElementById('expenseAmount').value) || 0,
+            date: document.getElementById('expenseDate').value,
+          })
+        });
+        showToast('Expense added', 'success');
+        closeModal('expenseModal');
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // ── Income Tab ──
+    function renderIncome() {
+      const d = managerData.data || {};
+      const bores = d.bores || [];
+      const el = document.getElementById('tab-income');
+      const allPayments = [];
+      bores.forEach(b => {
+        (b.payments || []).forEach(p => {
+          allPayments.push({ ...p, boreNumber: b.boreNumber, boreId: b.id });
+        });
+      });
+      allPayments.sort((a, b) => new Date(b.date) - new Date(a.date));
+      const total = allPayments.reduce((s, p) => s + p.amount, 0);
+      if (allPayments.length === 0) {
+        el.innerHTML = '<div class="empty"><div class="icon">&#128176;</div><p>No payments received yet</p></div>';
+        return;
+      }
+      el.innerHTML = '<div style="font-weight:600;font-size:14px;margin-bottom:12px;">Total Income: <span style="color:#2e7d32">' + formatINR(total) + '</span> from ' + allPayments.length + ' payments</div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Bore</th><th>Amount</th></tr></thead><tbody>' +
+        allPayments.map(p => '<tr><td>' + formatDate(p.date) + '</td><td><a href="#" style="color:#1565c0;text-decoration:none;" onclick="switchTab(\'bores\');return false;">' + escapeHtml(p.boreNumber) + '</a></td><td style="color:#2e7d32;font-weight:600;">' + formatINR(p.amount) + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+
+    // ── Pipe Tab ──
+    function renderPipe() {
+      const d = managerData.data || {};
+      const pipeStock = d.pipeStock || [];
+      const pipeLogs = d.pipeLogs || [];
+      const el = document.getElementById('tab-pipe');
+      el.innerHTML = '<div class="flex items-center justify-between mb-2"><span style="font-weight:600;font-size:14px;">Pipe Stock (' + pipeStock.length + ' sizes)</span><button class="btn btn-sm btn-primary" onclick="openModal(\'pipeModal\')">+ Update Stock</button></div>';
+
+      if (pipeStock.length === 0) {
+        el.innerHTML += '<div class="empty"><p>No pipe stock</p></div>';
+      } else {
+        el.innerHTML += '<div class="table-wrap mb-2"><table><thead><tr><th>Size (in)</th><th>Quantity</th></tr></thead><tbody>' +
+          pipeStock.map(s => '<tr><td>' + s.size + '"</td><td>' + s.quantity + '</td></tr>').join('') +
+          '</tbody></table></div>';
+      }
+
+      if (pipeLogs.length > 0) {
+        el.innerHTML += '<h4 style="font-size:13px;font-weight:600;color:#666;margin:12px 0 8px;">Pipe Logs</h4><div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Qty</th><th>Diameter</th><th>Related Bore</th></tr></thead><tbody>' +
+          pipeLogs.map(l => '<tr><td>' + formatDate(l.date) + '</td><td>' + escapeHtml(l.type) + '</td><td>' + l.quantity + '</td><td>' + (l.diameter || '-') + '</td><td>' + escapeHtml(l.relatedBore || '-') + '</td></tr>').join('') +
+          '</tbody></table></div>';
+      }
+    }
+
+    document.getElementById('savePipeBtn').addEventListener('click', async () => {
+      try {
+        await api('/api/managers/' + MANAGER_ID + '/pipe-stock', {
+          method: 'POST',
+          body: JSON.stringify({ size: Number(document.getElementById('pipeSize').value), quantity: Number(document.getElementById('pipeQty').value) })
+        });
+        showToast('Pipe stock updated', 'success');
+        closeModal('pipeModal');
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // ── Agents Tab ──
+    function renderAgents() {
+      const d = managerData.data || {};
+      const agents = d.agents || [];
+      const el = document.getElementById('tab-agents');
+      if (agents.length === 0) {
+        el.innerHTML = '<div class="empty"><div class="icon">&#128100;</div><p>No agents found</p></div>';
+        return;
+      }
+      el.innerHTML = '<div style="font-weight:600;font-size:14px;margin-bottom:12px;">' + agents.length + ' Agents</div><div class="table-wrap"><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>' +
+        agents.map(a => '<tr><td style="font-weight:500;">' + escapeHtml(a.name) + '</td><td><div class="actions"><button class="btn btn-sm btn-outline" onclick="editAgent(\'' + a.id + '\')">Edit</button><button class="btn btn-sm btn-danger" onclick="confirmDelete(\'agent\',\'' + a.id + '\')">Del</button></div></td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+
+    function editAgent(id) {
+      const a = (managerData.data?.agents || []).find(x => x.id === id);
+      if (!a) return;
+      document.getElementById('editAgentId').value = id;
+      document.getElementById('agentName').value = a.name;
+      document.getElementById('agentModalTitle').textContent = 'Edit Agent';
+      openModal('agentModal');
+    }
+
+    document.getElementById('saveAgentBtn').addEventListener('click', async () => {
+      const id = document.getElementById('editAgentId').value;
+      try {
+        await api('/api/managers/' + MANAGER_ID + '/agents/' + id, {
+          method: 'PUT',
+          body: JSON.stringify({ name: document.getElementById('agentName').value })
+        });
+        showToast('Agent updated', 'success');
+        closeModal('agentModal');
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // ── Delete Handler ──
+    function confirmDelete(type, id) {
+      deleteAction = { type, id };
+      const labels = { bore: 'this bore', worker: 'this worker', agent: 'this agent' };
+      document.getElementById('deleteConfirmMsg').textContent = 'Delete ' + (labels[type] || 'this item') + '? This cannot be undone.';
+      openModal('deleteConfirmModal');
+    }
+
+    document.getElementById('confirmDeleteBtn2').addEventListener('click', async () => {
+      if (!deleteAction) return;
+      const { type, id } = deleteAction;
+      try {
+        const endpoints = {
+          bore: '/api/managers/' + MANAGER_ID + '/bores/' + id,
+          worker: '/api/managers/' + MANAGER_ID + '/workers/' + id,
+          agent: '/api/managers/' + MANAGER_ID + '/agents/' + id,
+        };
+        await api(endpoints[type], { method: 'DELETE' });
+        showToast('Deleted', 'success');
+        closeModal('deleteConfirmModal');
+        deleteAction = null;
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    // ── Edit Manager ──
+    function toggleDetailFreeze(currentlyFrozen) {
+      if (currentlyFrozen) {
+        api('/api/managers/' + MANAGER_ID, { method: 'PUT', body: JSON.stringify({ frozen: false, statusReason: '' }) })
+          .then(() => { showToast('Manager unfrozen', 'success'); loadManager(); })
+          .catch(e => showToast(e.message, 'error'));
+      } else {
+        const reason = prompt('Reason for freezing this account:');
+        if (reason === null) return;
+        api('/api/managers/' + MANAGER_ID, { method: 'PUT', body: JSON.stringify({ frozen: true, statusReason: reason }) })
+          .then(() => { showToast('Manager frozen', 'success'); loadManager(); })
+          .catch(e => showToast(e.message, 'error'));
+      }
+    }
+
+    function toggleDetailLock(currentlyLocked) {
+      if (currentlyLocked) {
+        api('/api/managers/' + MANAGER_ID, { method: 'PUT', body: JSON.stringify({ locked: false, statusReason: '' }) })
+          .then(() => { showToast('Manager unlocked', 'success'); loadManager(); })
+          .catch(e => showToast(e.message, 'error'));
+      } else {
+        const reason = prompt('Reason for locking this account:');
+        if (reason === null) return;
+        api('/api/managers/' + MANAGER_ID, { method: 'PUT', body: JSON.stringify({ locked: true, statusReason: reason }) })
+          .then(() => { showToast('Manager locked', 'success'); loadManager(); })
+          .catch(e => showToast(e.message, 'error'));
+      }
+    }
+
+    document.getElementById('editManagerBtn').addEventListener('click', () => {
+      document.getElementById('editMgrName').value = managerData.name;
+      document.getElementById('editMgrVehicle').value = managerData.vehicleNumber;
+      document.getElementById('editMgrPassword').value = '';
+      openModal('editMgrModal');
+    });
+
+    document.getElementById('saveEditMgrBtn').addEventListener('click', async () => {
+      try {
+        const body = {
+          name: document.getElementById('editMgrName').value,
+          vehicleNumber: document.getElementById('editMgrVehicle').value,
+        };
+        const pw = document.getElementById('editMgrPassword').value;
+        if (pw) body.password = pw;
+        await api('/api/managers/' + MANAGER_ID, { method: 'PUT', body: JSON.stringify(body) });
+        showToast('Manager updated', 'success');
+        closeModal('editMgrModal');
+        loadManager();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    document.getElementById('deleteManagerBtn').addEventListener('click', () => {
+      if (!confirm('Delete this manager and ALL associated data?')) return;
+      api('/api/managers/' + MANAGER_ID, { method: 'DELETE' }).then(() => {
+        showToast('Manager deleted', 'success');
+        setTimeout(() => { window.location.href = '/admin/managers'; }, 1000);
+      }).catch(e => showToast(e.message, 'error'));
+    });
+
+    function switchTab(tab) {
+      document.querySelectorAll('#detailTabs button').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+      });
+      document.querySelectorAll('#tabContent > .card').forEach(c => c.style.display = 'none');
+      document.getElementById('tab-' + tab).style.display = 'block';
+      loadTab(tab);
+    }
+
+    loadManager();
+  </script>
+</body>
+</html>

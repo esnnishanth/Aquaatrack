@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><%- include('_head') %></head>
+<body>
+  <%- include('_sidebar') %>
+  <div class="main">
+    <%- include('_header') %>
+    <div class="content">
+      <a href="/admin/owners" class="btn btn-sm btn-outline mb-2">&larr; Back to Owners</a>
+
+      <div id="loading" class="loading"><div class="spinner"></div>Loading owner...</div>
+      <div id="detailContent" style="display:none">
+        <div class="card">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 style="font-size:20px;font-weight:600;color:#1a1a2e;" id="ownerName"></h2>
+              <p class="text-sm text-muted" id="ownerEmail"></p>
+              <div class="flex gap-1 mt-1" id="ownerStatusBadges"></div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-sm btn-warning" id="ownerChangePwBtn">Change Password</button>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="font-size:16px;font-weight:600;color:#1a1a2e;margin-bottom:12px;">Managers under this Owner</h3>
+        <div class="card" id="managersCard">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Vehicle #</th><th>Status</th><th>Bores</th><th>Workers</th><th>Income</th><th>Expenses</th><th>Actions</th></tr></thead>
+              <tbody id="managersBody"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="emptyState" style="display:none"><div class="icon">&#128196;</div><p>No managers under this owner</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password Modal -->
+  <div class="modal-overlay" id="passwordModal">
+    <div class="modal" style="max-width:400px">
+      <h3>Change Owner Password</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">New password for <strong id="pwOwnerEmail"></strong></p>
+      <div class="form-group"><label>New Password</label><input type="text" id="newPassword" placeholder="Min 6 characters"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="closeModal('passwordModal')">Cancel</button>
+        <button class="btn btn-warning" id="savePasswordBtn">Change Password</button>
+      </div>
+    </div>
+  </div>
+
+  <%- include('_scripts') %>
+  <script>
+    const OWNER_ID = '<%= ownerId %>';
+
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    function openModal(id) { document.getElementById(id).classList.add('show'); }
+
+    async function loadData() {
+      try {
+        const [owner, mgrRes] = await Promise.all([
+          api('/api/owners/' + OWNER_ID),
+          api('/api/managers?ownerId=' + OWNER_ID)
+        ]);
+        const managers = mgrRes.data || [];
+
+        document.getElementById('ownerName').textContent = owner.name;
+        document.getElementById('ownerEmail').textContent = owner.email;
+        document.getElementById('pwOwnerEmail').textContent = owner.email;
+
+        // Status badges
+        const badges = [];
+        if (owner.locked) badges.push('<span class="badge" style="background:#fce4ec;color:#c62828;font-size:13px;">&#128274; Locked</span>');
+        const sub = owner.subscription || {};
+        const plan = sub.plan || 'free';
+        if (plan === 'premium') badges.push('<span class="badge" style="background:#fff3e0;color:#e65100;font-size:13px;">Premium</span>');
+        else if (plan === 'basic') badges.push('<span class="badge" style="background:#e3f2fd;color:#1565c0;font-size:13px;">Basic</span>');
+        else badges.push('<span class="badge badge-green" style="font-size:13px;">Free</span>');
+        const maxM = owner.maxManagers || 0;
+        const usedM = owner.managersUsed || 0;
+        const cls = usedM >= maxM ? ' style="background:#fce4ec;color:#c62828;font-size:13px;"' : ' class="badge" style="font-size:13px;"';
+        badges.push('<span' + cls + '>Managers: ' + usedM + '/' + maxM + '</span>');
+        document.getElementById('ownerStatusBadges').innerHTML = badges.join(' ');
+
+        const tbody = document.getElementById('managersBody');
+        const empty = document.getElementById('emptyState');
+
+        if (managers.length === 0) {
+          tbody.innerHTML = '';
+          empty.style.display = 'block';
+        } else {
+          empty.style.display = 'none';
+          tbody.innerHTML = managers.map(m => {
+            const d = m.data || {};
+            const frozen = m.frozen === true;
+            const locked = m.locked === true;
+            let inc = 0, exp = 0;
+            (d.bores || []).forEach(b => (b.payments || []).forEach(p => inc += p.amount));
+            (d.normalExpenses || []).forEach(e => exp += e.amount);
+            (d.labourPayments || []).forEach(l => exp += l.amount);
+            const statusBadge = locked ? '<span class="badge" style="background:#fce4ec;color:#c62828;font-size:13px;">&#128274; Locked</span>'
+              : (frozen ? '<span class="badge badge-amber" style="font-size:13px;">&#9888; Frozen</span>'
+              : '<span class="badge badge-green">Active</span>');
+            const bg = locked ? '#fce4ec' : (frozen ? '#fff8e1' : '');
+            return `<tr${bg ? ' style="background:' + bg + ';"' : ''}>
+              <td><a href="/admin/managers/${m.id}" style="color:#1565c0;text-decoration:none;font-weight:500;">${escapeHtml(m.name)}</a></td>
+              <td class="mono">${escapeHtml(m.vehicleNumber)}</td>
+              <td>${statusBadge}</td>
+              <td>${(d.bores || []).length}</td>
+              <td>${(d.workers || []).length}</td>
+              <td>${formatINR(inc)}</td>
+              <td>${formatINR(exp)}</td>
+              <td>${locked ? '<span class="text-sm text-muted">Restricted</span>' : '<a href="/admin/managers/' + m.id + '" class="btn btn-sm btn-outline">View</a>'}</td>
+            </tr>`;
+          }).join('');
+        }
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('detailContent').style.display = 'block';
+      } catch (e) {
+        document.getElementById('loading').innerHTML = '<div class="alert alert-error">' + escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    document.getElementById('ownerChangePwBtn').addEventListener('click', () => {
+      document.getElementById('newPassword').value = '';
+      openModal('passwordModal');
+    });
+
+    document.getElementById('savePasswordBtn').addEventListener('click', async () => {
+      const password = document.getElementById('newPassword').value;
+      if (!password || password.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+      try {
+        await api('/api/owners/' + OWNER_ID, { method: 'PUT', body: JSON.stringify({ password }) });
+        showToast('Password changed', 'success');
+        closeModal('passwordModal');
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+
+    loadData();
+  </script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <%- include('_head') %>
+</head>
+<body>
+  <%- include('_sidebar') %>
+  <div class="main">
+    <%- include('_header') %>
+    <div class="content">
+      <div id="loading" class="loading">
+        <div class="spinner"></div>
+        Loading dashboard...
+      </div>
+
+      <div id="dashboardContent" style="display:none">
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 style="font-size:15px;font-weight:600;color:#1a1a2e;">Recent Managers</h3>
+            <a href="/admin/managers" class="btn btn-sm btn-outline">View All</a>
+          </div>
+          <div class="table-wrap">
+            <table id="recentManagersTable">
+              <thead><tr><th>Name</th><th>Vehicle</th><th>Bores</th><th>Income</th><th>Expenses</th><th>Workers</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-size:15px;font-weight:600;color:#1a1a2e;margin-bottom:12px;">Recent Bores</h3>
+          <div class="table-wrap">
+            <table id="recentBoresTable">
+              <thead><tr><th>Date</th><th>Bore #</th><th>Manager</th><th>Feet</th><th>Total Bill</th><th>Payments</th><th>Balance</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <%- include('_scripts') %>
+  <script>
+    async function loadDashboard() {
+      try {
+        const [managersRes] = await Promise.all([api('/api/managers')]);
+        const managers = managersRes.data || [];
+
+        // Calculate totals
+        let totalManagers = managers.length;
+        let totalBores = 0, totalIncome = 0, totalExpenses = 0, totalWorkers = 0, totalPipe = 0;
+
+        managers.forEach(m => {
+          const d = m.data || {};
+          const bores = d.bores || [];
+          const expenses = d.normalExpenses || [];
+          const workers = d.workers || [];
+          const labourPayments = d.labourPayments || [];
+          const pipeStock = d.pipeStock || [];
+
+          totalBores += bores.length;
+          totalWorkers += workers.length;
+
+          // Income from bore payments
+          bores.forEach(b => {
+            (b.payments || []).forEach(p => { totalIncome += p.amount; });
+          });
+
+          // Expenses
+          expenses.forEach(e => { totalExpenses += e.amount; });
+          labourPayments.forEach(l => { totalExpenses += l.amount; });
+
+          // Pipe stock
+          pipeStock.forEach(s => { totalPipe += s.quantity; });
+        });
+
+        const stats = [
+          { label: 'Total Managers', value: totalManagers, color: '#1565c0', bg: '#e3f2fd' },
+          { label: 'Total Bores', value: totalBores, color: '#2e7d32', bg: '#e8f5e9' },
+          { label: 'Total Income', value: formatINR(totalIncome), color: '#2e7d32', bg: '#e8f5e9' },
+          { label: 'Total Expenses', value: formatINR(totalExpenses), color: '#c62828', bg: '#fce4ec' },
+          { label: 'Net Profit', value: formatINR(totalIncome - totalExpenses), color: totalIncome >= totalExpenses ? '#2e7d32' : '#c62828', bg: '#fff3e0' },
+          { label: 'Total Workers', value: totalWorkers, color: '#f57c00', bg: '#fff3e0' },
+          { label: 'Pipe Stock (ft)', value: totalPipe.toLocaleString(), color: '#6a1b9a', bg: '#f3e5f5' },
+        ];
+
+        document.getElementById('statsGrid').innerHTML = stats.map(s => `
+          <div class="stat-card">
+            <div class="label">${s.label}</div>
+            <div class="value" style="color:${s.color}">${s.value}</div>
+          </div>
+        `).join('');
+
+        // Recent managers table
+        const tbody1 = document.querySelector('#recentManagersTable tbody');
+        tbody1.innerHTML = managers.slice(0, 10).map(m => {
+          const d = m.data || {};
+          const bores = d.bores || [];
+          let income = 0, expenses = 0;
+          bores.forEach(b => (b.payments || []).forEach(p => { income += p.amount; }));
+          (d.normalExpenses || []).forEach(e => { expenses += e.amount; });
+          (d.labourPayments || []).forEach(l => { expenses += l.amount; });
+          return `<tr>
+            <td><a href="/admin/managers/${m.id}" style="color:#1565c0;text-decoration:none;font-weight:500;">${escapeHtml(m.name)}</a></td>
+            <td class="mono">${escapeHtml(m.vehicleNumber)}</td>
+            <td>${bores.length}</td>
+            <td>${formatINR(income)}</td>
+            <td>${formatINR(expenses)}</td>
+            <td>${(d.workers || []).length}</td>
+          </tr>`;
+        }).join('');
+
+        // Recent bores across all managers
+        const allBores = [];
+        managers.forEach(m => {
+          (m.data?.bores || []).forEach(b => {
+            const totalPayments = (b.payments || []).reduce((s, p) => s + p.amount, 0);
+            allBores.push({ ...b, managerName: m.name, managerId: m.id, totalPayments, balance: (b.totalBill || 0) - totalPayments });
+          });
+        });
+        allBores.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const tbody2 = document.querySelector('#recentBoresTable tbody');
+        tbody2.innerHTML = allBores.slice(0, 10).map(b => `<tr>
+          <td>${formatDate(b.date)}</td>
+          <td><a href="/admin/managers/${b.managerId}" style="color:#1565c0;text-decoration:none;font-weight:500;">${escapeHtml(b.boreNumber)}</a></td>
+          <td>${escapeHtml(b.managerName)}</td>
+          <td>${b.totalFeet}</td>
+          <td>${formatINR(b.totalBill)}</td>
+          <td>${formatINR(b.totalPayments)}</td>
+          <td style="color:${b.balance > 0 ? '#c62828' : '#2e7d32'};font-weight:600;">${formatINR(b.balance)}</td>
+        </tr>`).join('');
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('dashboardContent').style.display = 'block';
+      } catch (e) {
+        document.getElementById('loading').innerHTML = '<div class="alert alert-error">Failed to load dashboard: ' + escapeHtml(e.message) + '</div>';
+      }
+    }
+    loadDashboard();
+  </script>
+</body>
+</html>

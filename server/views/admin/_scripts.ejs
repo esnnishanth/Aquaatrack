@@ -1,0 +1,58 @@
+<div id="toast" class="toast"></div>
+<script>
+  const API = window.location.origin;
+  let token = localStorage.getItem('admin_token');
+
+  function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + (type || 'info');
+    setTimeout(() => t.classList.add('show'), 10);
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function api(path, opts) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    return fetch(API + path, { ...(opts || {}), headers }).then(async r => {
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    });
+  }
+
+  function formatINR(n) {
+    return '\u20B9' + Number(n || 0).toLocaleString('en-IN');
+  }
+
+  function formatDate(d) {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function escapeHtml(t) {
+    const d = document.createElement('div');
+    d.textContent = t;
+    return d.innerHTML;
+  }
+
+  // Load owner info for header
+  if (window.location.pathname !== '/admin/login') {
+    api('/api/auth/owner/me').then(u => {
+      const e1 = document.getElementById('ownerName');
+      const e2 = document.getElementById('ownerAvatar');
+      if (e1) e1.textContent = u.name || u.email;
+      if (e2) e2.textContent = (u.name || 'O')[0].toUpperCase();
+    }).catch(() => {
+      localStorage.removeItem('admin_token');
+      window.location.href = '/admin/login';
+    });
+  }
+
+  document.getElementById('logoutBtn')?.addEventListener('click', async e => {
+    e.preventDefault();
+    await fetch('/admin/api/logout', { method: 'POST' }).catch(() => {});
+    localStorage.removeItem('admin_token');
+    window.location.href = '/admin/login';
+  });
+</script>
