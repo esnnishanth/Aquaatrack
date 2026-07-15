@@ -372,10 +372,8 @@ class AgentTab extends StatelessWidget {
                   : totalOrigComm;
               totalDisplayBal = totalOrigBal - settlementAmount;
               totalDisplayComm = totalOrigComm - settlementAmount;
-            } else if (totalOrigBal <= 0 && totalOrigComm > 0) {
-              settlementAmount = totalOrigComm;
-              totalDisplayBal = 0;
-              totalDisplayComm = 0;
+            } else {
+              settlementAmount = 0;
             }
           }
 
@@ -614,6 +612,7 @@ class AgentTab extends StatelessWidget {
 
                                     final spinController = TextEditingController();
                                     String? spinError;
+                                    String settleMethod = 'cash';
                                     final spinConfirmed = await showDialog<bool>(
                                       context: context,
                                       builder: (ctx) => StatefulBuilder(
@@ -640,10 +639,51 @@ class AgentTab extends StatelessWidget {
                                                       child: const Icon(Icons.lock_outline_rounded, color: Colors.white, size: 26),
                                                     ),
                                                     const SizedBox(height: 16),
-                                                    Text(context.t('Enter SPIN'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.foreground)),
-                                                    const SizedBox(height: 6),
-                                                    Text(context.t('Enter 4-digit security PIN to confirm settlement'), style: TextStyle(fontSize: 13, color: AppTheme.mutedForeground)),
-                                                    const SizedBox(height: 20),
+                                                    Text(context.t('Settle Commissions'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.foreground)),
+                                                    const SizedBox(height: 16),
+                                                    Container(
+                                                      decoration: BoxDecoration(
+                                                        borderRadius: BorderRadius.circular(12),
+                                                        border: Border.all(color: AppTheme.border),
+                                                      ),
+                                                      padding: const EdgeInsets.all(12),
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(context.t('Select Paid Method'), style: TextStyle(fontSize: 13, color: AppTheme.mutedForeground)),
+                                                          const SizedBox(height: 8),
+                                                          Row(
+                                                            children: [
+                                                              Expanded(
+                                                                child: Row(
+                                                                  children: [
+                                                                    Radio<String>(
+                                                                      value: 'cash',
+                                                                      groupValue: settleMethod,
+                                                                      onChanged: (v) => setSpinState(() => settleMethod = v!),
+                                                                    ),
+                                                                    Text(context.t('Cash')),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                              Expanded(
+                                                                child: Row(
+                                                                  children: [
+                                                                    Radio<String>(
+                                                                      value: 'account',
+                                                                      groupValue: settleMethod,
+                                                                      onChanged: (v) => setSpinState(() => settleMethod = v!),
+                                                                    ),
+                                                                    Text(context.t('Account')),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 16),
                                                     TextField(
                                                       controller: spinController,
                                                       maxLength: 4,
@@ -742,6 +782,7 @@ class AgentTab extends StatelessWidget {
                                           boreId: bore.id,
                                           amount: bal,
                                           date: DateTime.now(),
+                                          method: settleMethod,
                                         );
                                       }
                                     }
@@ -757,6 +798,7 @@ class AgentTab extends StatelessWidget {
                                         description: 'commission',
                                         amount: settlementAmount,
                                         date: DateTime.now(),
+                                        method: settleMethod,
                                       );
                                     }
                                     Navigator.of(context).pop();

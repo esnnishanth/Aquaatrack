@@ -211,6 +211,7 @@ class _NormalExpenseForm extends StatefulWidget {
 class _NormalExpenseFormState extends State<_NormalExpenseForm> {
   late final TextEditingController _descController;
   late final TextEditingController _amountController;
+  String _expMethod = 'cash';
 
   @override
   void initState() {
@@ -261,6 +262,7 @@ class _NormalExpenseFormState extends State<_NormalExpenseForm> {
               const SizedBox(height: 12),
               TextField(
                 controller: _amountController,
+                onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: context.t('Amount'),
                   filled: true,
@@ -276,6 +278,54 @@ class _NormalExpenseFormState extends State<_NormalExpenseForm> {
                 ),
                 keyboardType: TextInputType.number,
               ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                child: (double.tryParse(_amountController.text) ?? 0) > 0
+                    ? Container(
+                        margin: const EdgeInsets.only(top: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(context.t('Select Paid Method'), style: TextStyle(fontSize: 13, color: AppTheme.mutedForeground)),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Radio<String>(
+                                        value: 'cash',
+                                        groupValue: _expMethod,
+                                        onChanged: (v) => setState(() => _expMethod = v!),
+                                      ),
+                                      Text(context.t('Cash')),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Radio<String>(
+                                        value: 'account',
+                                        groupValue: _expMethod,
+                                        onChanged: (v) => setState(() => _expMethod = v!),
+                                      ),
+                                      Text(context.t('Account')),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
               const SizedBox(height: 12),
               if (!widget.readOnly)
                 ElevatedButton(
@@ -283,7 +333,7 @@ class _NormalExpenseFormState extends State<_NormalExpenseForm> {
                     final desc = _descController.text.trim();
                     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
                     if (desc.isEmpty || amount <= 0) return;
-                    await api.addNormalExpense(managerId: widget.manager.id, description: desc, amount: amount, date: DateTime.now(), createdBy: widget.role);
+                    await api.addNormalExpense(managerId: widget.manager.id, description: desc, amount: amount, date: DateTime.now(), method: _expMethod, createdBy: widget.role);
                     await widget.onRefresh();
                     _descController.clear();
                     _amountController.clear();
@@ -314,6 +364,7 @@ class _LabourPaymentForm extends StatefulWidget {
 class _LabourPaymentFormState extends State<_LabourPaymentForm> {
   Worker? _selectedWorker;
   late final TextEditingController _amountController;
+  String _payMethod = 'cash';
 
   @override
   void initState() {
@@ -364,6 +415,7 @@ class _LabourPaymentFormState extends State<_LabourPaymentForm> {
               const SizedBox(height: 12),
               TextField(
                 controller: _amountController,
+                onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: context.t('Amount'),
                   filled: true,
@@ -379,6 +431,54 @@ class _LabourPaymentFormState extends State<_LabourPaymentForm> {
                 ),
                 keyboardType: TextInputType.number,
               ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                child: (double.tryParse(_amountController.text) ?? 0) > 0
+                    ? Container(
+                        margin: const EdgeInsets.only(top: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(context.t('Select Paid Method'), style: TextStyle(fontSize: 13, color: AppTheme.mutedForeground)),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Radio<String>(
+                                        value: 'cash',
+                                        groupValue: _payMethod,
+                                        onChanged: (v) => setState(() => _payMethod = v!),
+                                      ),
+                                      Text(context.t('Cash')),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Radio<String>(
+                                        value: 'account',
+                                        groupValue: _payMethod,
+                                        onChanged: (v) => setState(() => _payMethod = v!),
+                                      ),
+                                      Text(context.t('Account')),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
               const SizedBox(height: 12),
               if (!widget.readOnly)
                 ElevatedButton(
@@ -386,7 +486,7 @@ class _LabourPaymentFormState extends State<_LabourPaymentForm> {
                     if (_selectedWorker == null) return;
                     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
                     if (amount <= 0) return;
-                    await api.addLabourPayment(managerId: widget.manager.id, workerId: _selectedWorker!.id, amount: amount, date: DateTime.now(), createdBy: widget.role);
+                    await api.addLabourPayment(managerId: widget.manager.id, workerId: _selectedWorker!.id, amount: amount, date: DateTime.now(), method: _payMethod, createdBy: widget.role);
                     await widget.onRefresh();
                     _amountController.clear();
                   },

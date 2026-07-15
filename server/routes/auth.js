@@ -31,7 +31,7 @@ function authMiddleware(req, res, next) {
 // POST /api/auth/owner/signup
 router.post('/owner/signup', async (req, res) => {
   try {
-    const { name, email, password, phone } = req.body;
+    const { name, email, password, phone, partnership, partnerEmails } = req.body;
     if (!name || !email || !password || !phone) {
       return res.status(400).json({ error: 'Name, email, phone, and password are required' });
     }
@@ -52,7 +52,11 @@ router.post('/owner/signup', async (req, res) => {
       return res.status(409).json({ error: 'An account with this phone number already exists' });
     }
 
-    const owner = await Owner.create({ name, email, phone, password });
+    const owner = await Owner.create({
+      name, email, phone, password,
+      partnership: partnership === true,
+      partnerEmails: Array.isArray(partnerEmails) ? partnerEmails : [],
+    });
     const token = signToken(owner);
     res.status(201).json({
       token,

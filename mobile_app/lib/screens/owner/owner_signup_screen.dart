@@ -27,6 +27,9 @@ class _OwnerSignupScreenState extends State<OwnerSignupScreen>
   final _phoneController = TextEditingController();
   final _pwController = TextEditingController();
   final _confirmController = TextEditingController();
+  final _partnerEmailController = TextEditingController();
+  final _partnerEmails = <String>[];
+  bool _isPartnership = false;
   final _otpControllers = List.generate(6, (_) => TextEditingController());
   final _otpFocusNodes = List.generate(6, (_) => FocusNode());
   bool _loading = false;
@@ -53,6 +56,7 @@ class _OwnerSignupScreenState extends State<OwnerSignupScreen>
     _phoneController.dispose();
     _pwController.dispose();
     _confirmController.dispose();
+    _partnerEmailController.dispose();
     for (final c in _otpControllers) { c.dispose(); }
     for (final f in _otpFocusNodes) { f.dispose(); }
     super.dispose();
@@ -66,6 +70,11 @@ class _OwnerSignupScreenState extends State<OwnerSignupScreen>
     if (name.isEmpty) { setState(() => _error = 'Enter your name'); return; }
     if (email.isEmpty || !email.contains('@')) { setState(() => _error = 'Enter a valid email'); return; }
     if (phone.isEmpty || !RegExp(r'^\d{10}$').hasMatch(phone)) { setState(() => _error = 'Enter a valid 10-digit phone number'); return; }
+    if (_isPartnership) {
+      if (_partnerEmails.isEmpty) { setState(() => _error = 'Add at least one partner email'); return; }
+    } else {
+      _partnerEmails.clear();
+    }
     setState(() { _loading = true; _error = null; });
     try {
       final api = context.read<ApiService>();
@@ -121,7 +130,15 @@ class _OwnerSignupScreenState extends State<OwnerSignupScreen>
     if (pw != confirm) { setState(() => _error = 'Passwords do not match'); return; }
     setState(() { _loading = true; _error = null; });
     try {
-      await context.read<AuthService>().signUpWithEmail(name: _name, email: _email, phone: _phone, password: pw);
+      final partnerEmails = _isPartnership ? List<String>.from(_partnerEmails) : <String>[];
+      await context.read<AuthService>().signUpWithEmail(
+        name: _name,
+        email: _email,
+        phone: _phone,
+        password: pw,
+        partnership: _isPartnership,
+        partnerEmails: partnerEmails,
+      );
       await context.read<AuthService>().signOut();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
@@ -365,15 +382,14 @@ class _OwnerSignupScreenState extends State<OwnerSignupScreen>
   }
 
   Future<void> _signupWithGoogle() async {
-    final phone = await _showPhoneDialog();
-    if (phone == null) return;
-    _phone = phone;
-    setState(() { _loading = true; _error = null; });
+    final ok = await _showPhoneDialog();
+    if (!ok) return;
     try {
       final account = await context.read<AuthService>().pickGoogleAccount();
-      if (account == null) { setState(() => _loading = false); return; }
+      if (account == null) return;
       _name = account.name;
       _email = account.email;
+      setState(() { _loading = true; _error = null; });
       final api = context.read<ApiService>();
       final exists = await api.ownerExists(_email);
       if (!mounted) return;
@@ -381,7 +397,7 @@ class _OwnerSignupScreenState extends State<OwnerSignupScreen>
         setState(() { _error = 'This email already has an account. Please login.'; _loading = false; });
         return;
       }
-      final existingPhone = await api.ownerExistsByPhone(phone);
+      final existingPhone = await api.ownerExistsByPhone(_phone);
       if (existingPhone) {
         if (!mounted) return;
         setState(() { _error = 'This phone number already has an account.'; _loading = false; });
@@ -395,46 +411,153 @@ class _OwnerSignupScreenState extends State<OwnerSignupScreen>
     }
   }
 
-  Future<String?> _showPhoneDialog() async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
+  Future<bool> _showPhoneDialog() async {
+    final phoneController = TextEditingController();
+    final emailController = TextEditingController();
+    final nav = Navigator.of(context, rootNavigator: true);
+    bool isPartnership = false;
+    final partnerEmails = <String>[];
+    final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Enter Phone Number'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.phone,
-          maxLength: 10,
-          decoration: const InputDecoration(
-            hintText: '10-digit phone number',
-            counterText: '',
+      builder: (_) => StatefulBuilder(
+        builder: (_, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Enter Phone Number'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                decoration: const InputDecoration(
+                  hintText: '10-digit phone number',
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () => setDialogState(() { isPartnership = !isPartnership; }),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 22, height: 22,
+                      decoration: BoxDecoration(
+                        color: isPartnership ? AppTheme.primary : Colors.white,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: isPartnership ? AppTheme.primary : const Color(0xFFD1D5DB), width: 1.5),
+                      ),
+                      child: isPartnership
+                          ? const Icon(Icons.check, size: 16, color: Colors.white)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Text('Partnership', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: const Color(0xFF374151))),
+                  ],
+                ),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: isPartnership
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: emailController,
+                                    keyboardType: TextInputType.emailAddress,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Partner email',
+                                      isDense: true,
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.add_circle_outline, color: Color(0xFF4F46E5)),
+                                  onPressed: () {
+                                    final e = emailController.text.trim();
+                                    if (e.isEmpty || !e.contains('@')) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Enter a valid email')),
+                                      );
+                                      return;
+                                    }
+                                    setDialogState(() {
+                                      partnerEmails.add(e);
+                                      emailController.clear();
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                            if (partnerEmails.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: partnerEmails.map((e) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.mail_outline, size: 16, color: Color(0xFF6B7280)),
+                                        const SizedBox(width: 6),
+                                        Expanded(child: Text(e, style: const TextStyle(fontSize: 13))),
+                                        GestureDetector(
+                                          onTap: () => setDialogState(() => partnerEmails.remove(e)),
+                                          child: const Icon(Icons.close, size: 16, color: Color(0xFFEF4444)),
+                                        ),
+                                      ],
+                                    ),
+                                  )).toList(),
+                                ),
+                              ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => nav.pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final p = phoneController.text.trim();
+                if (p.isEmpty || !RegExp(r'^\d{10}$').hasMatch(p)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter a valid 10-digit phone number')),
+                  );
+                  return;
+                }
+                _phone = p;
+                _isPartnership = isPartnership;
+                _partnerEmails
+                  ..clear()
+                  ..addAll(partnerEmails);
+                _partnerEmailController.text = partnerEmails.isNotEmpty ? partnerEmails.first : '';
+                nav.pop(true);
+              },
+              child: const Text('Continue'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final p = controller.text.trim();
-              if (p.isEmpty || !RegExp(r'^\d{10}$').hasMatch(p)) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Enter a valid 10-digit phone number')),
-                );
-                return;
-              }
-              Navigator.of(ctx).pop(p);
-            },
-            child: const Text('Continue'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
-    return result;
+    phoneController.dispose();
+    emailController.dispose();
+    return result ?? false;
   }
 
   Widget _buildDetailsStep() {
@@ -485,6 +608,86 @@ class _OwnerSignupScreenState extends State<OwnerSignupScreen>
         _GlassField(controller: _emailController, hint: 'Email Address', icon: Icons.alternate_email, keyboardType: TextInputType.emailAddress),
         const SizedBox(height: 14),
         _GlassField(controller: _phoneController, hint: 'Phone Number', icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
+        const SizedBox(height: 12),
+
+        // ── Partnership checkbox ──
+        GestureDetector(
+          onTap: () => setState(() { _isPartnership = !_isPartnership; if (!_isPartnership) _partnerEmailController.clear(); }),
+          child: Row(
+            children: [
+              Container(
+                width: 22, height: 22,
+                decoration: BoxDecoration(
+                  color: _isPartnership ? AppTheme.primary : Colors.white,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: _isPartnership ? AppTheme.primary : const Color(0xFFD1D5DB), width: 1.5),
+                ),
+                child: _isPartnership
+                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Text('Partnership', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: const Color(0xFF374151))),
+            ],
+          ),
+        ),
+
+        // ── Partner emails (slides down, multi-add) ──
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: _isPartnership
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _GlassField(controller: _partnerEmailController, hint: 'Partner Email', icon: Icons.mail_outline_rounded, keyboardType: TextInputType.emailAddress),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline, color: Color(0xFF4F46E5)),
+                            onPressed: () {
+                              final e = _partnerEmailController.text.trim();
+                              if (e.isEmpty || !e.contains('@')) return;
+                              setState(() {
+                                _partnerEmails.add(e);
+                                _partnerEmailController.clear();
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      if (_partnerEmails.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: _partnerEmails.map((e) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.mail_outline, size: 16, color: Color(0xFF6B7280)),
+                                  const SizedBox(width: 6),
+                                  Expanded(child: Text(e, style: const TextStyle(fontSize: 13))),
+                                  GestureDetector(
+                                    onTap: () => setState(() => _partnerEmails.remove(e)),
+                                    child: const Icon(Icons.close, size: 16, color: Color(0xFFEF4444)),
+                                  ),
+                                ],
+                              ),
+                            )).toList(),
+                          ),
+                        ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
         const SizedBox(height: 24),
 
         // ── Continue button ──

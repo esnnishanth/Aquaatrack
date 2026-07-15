@@ -14,14 +14,29 @@ class StatsCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalIncome = bores.expand((bore) => bore.payments).fold<double>(0, (sum, p) => sum + p.amount);
-    final totalNormalExpenses = normalExpenses
-        .where((e) => e.createdBy != 'owner')
-        .fold<double>(0, (sum, e) => sum + e.amount);
-    final totalLabour = labourPayments
-        .where((p) => p.createdBy != 'owner')
+    final cashIncome = bores
+        .expand((bore) => bore.payments)
+        .where((p) => p.method == 'cash')
         .fold<double>(0, (sum, p) => sum + p.amount);
-    final balance = totalIncome - totalNormalExpenses - totalLabour;
+    final accountIncome = bores
+        .expand((bore) => bore.payments)
+        .where((p) => p.method == 'account')
+        .fold<double>(0, (sum, p) => sum + p.amount);
+    final cashExpenses = normalExpenses
+        .where((e) => e.createdBy != 'owner' && e.method == 'cash')
+        .fold<double>(0, (sum, e) => sum + e.amount)
+        + labourPayments
+            .where((p) => p.createdBy != 'owner' && p.method == 'cash')
+            .fold<double>(0, (sum, p) => sum + p.amount);
+    final accountExpenses = normalExpenses
+        .where((e) => e.createdBy != 'owner' && e.method == 'account')
+        .fold<double>(0, (sum, e) => sum + e.amount)
+        + labourPayments
+            .where((p) => p.createdBy != 'owner' && p.method == 'account')
+            .fold<double>(0, (sum, p) => sum + p.amount);
+    final cashBalance = cashIncome - cashExpenses;
+    final accountBalance = accountIncome - accountExpenses;
+    final balance = cashBalance + accountBalance;
 
     final totalBoreFeet = bores.fold<double>(0, (sum, bore) => sum + bore.totalFeet);
     final totalPipeLength = bores.fold<double>(
@@ -31,7 +46,7 @@ class StatsCards extends StatelessWidget {
 
     return Column(
       children: [
-        _GlassStatCard(title: context.t('Balance'), value: currencyInr.format(balance), subtitle: context.t('After all expenses'), icon: Icons.account_balance_wallet_outlined, accent: balance >= 0),
+        _GlassStatCard(title: context.t('Balance'), value: currencyInr.format(balance), subtitle: 'Cash: ${currencyInr.format(cashBalance)}  A/c: ${currencyInr.format(accountBalance)}', icon: Icons.account_balance_wallet_outlined, accent: balance >= 0),
         const SizedBox(height: 12),
         _GlassStatCard(title: context.t('Total Bore Feet'), value: '${totalBoreFeet.toStringAsFixed(0)} ft', subtitle: context.t('All time'), icon: Icons.trending_up, accent: null),
         const SizedBox(height: 12),

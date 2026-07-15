@@ -84,88 +84,140 @@ class IncomeTab extends StatelessWidget {
   Future<void> _showPaymentDialog(BuildContext context) async {
     final api = context.read<ApiService>();
     Bore? selectedBore;
+    String paidMethod = 'cash';
     final amountController = TextEditingController();
 
     final boresWithBalance = bores.where((bore) => _balance(bore) > 0).toList();
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              decoration: AppTheme.glassDecoration(borderRadius: 24, opacity: 0.85),
-              padding: const EdgeInsets.all(24),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(context.t('Record Payment'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.foreground)),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<Bore>(
-                      value: selectedBore,
-                      items: boresWithBalance
-                          .map((bore) => DropdownMenuItem(
-                                value: bore,
-                                child: Text('${bore.boreNumber} (Balance: ${currencyInr.format(_balance(bore))})'),
-                              ))
-                          .toList(),
-                      onChanged: (value) => selectedBore = value,
-                      decoration: InputDecoration(
-                        labelText: context.t('Select Bore'),
-                        filled: true,
-                        fillColor: Colors.transparent,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(color: AppTheme.border),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(color: AppTheme.border),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(color: AppTheme.primary, width: 1.5),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: amountController,
-                      decoration: InputDecoration(
-                        labelText: context.t('Amount Received'),
-                        filled: true,
-                        fillColor: Colors.transparent,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(color: AppTheme.border),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(color: AppTheme.border),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(color: AppTheme.primary, width: 1.5),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                decoration: AppTheme.glassDecoration(borderRadius: 24, opacity: 0.85),
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(context.t('Record Payment'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.foreground)),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<Bore>(
+                        value: selectedBore,
+                        items: boresWithBalance
+                            .map((bore) => DropdownMenuItem(
+                                  value: bore,
+                                  child: Text('${bore.boreNumber} (Balance: ${currencyInr.format(_balance(bore))})'),
+                                ))
+                            .toList(),
+                        onChanged: (value) => selectedBore = value,
+                        decoration: InputDecoration(
+                          labelText: context.t('Select Bore'),
+                          filled: true,
+                          fillColor: Colors.transparent,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide: BorderSide(color: AppTheme.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide: BorderSide(color: AppTheme.border),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide: BorderSide(color: AppTheme.primary, width: 1.5),
+                          ),
                         ),
                       ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(context.t('Cancel'))),
-                        const SizedBox(width: 8),
-                        ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(context.t('Save'))),
-                      ],
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: amountController,
+                        onChanged: (_) => setDialogState(() {}),
+                        decoration: InputDecoration(
+                          labelText: context.t('Amount Received'),
+                          filled: true,
+                          fillColor: Colors.transparent,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide: BorderSide(color: AppTheme.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide: BorderSide(color: AppTheme.border),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide: BorderSide(color: AppTheme.primary, width: 1.5),
+                          ),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        child: (double.tryParse(amountController.text) ?? 0) > 0
+                            ? Container(
+                                margin: const EdgeInsets.only(top: 12),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppTheme.border),
+                                ),
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(context.t('Select Paid Method'), style: TextStyle(fontSize: 13, color: AppTheme.mutedForeground)),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Radio<String>(
+                                                value: 'cash',
+                                                groupValue: paidMethod,
+                                                onChanged: (v) => setDialogState(() => paidMethod = v!),
+                                              ),
+                                              Text(context.t('Cash')),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Radio<String>(
+                                                value: 'account',
+                                                groupValue: paidMethod,
+                                                onChanged: (v) => setDialogState(() => paidMethod = v!),
+                                              ),
+                                              Text(context.t('Account')),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(context.t('Cancel'))),
+                          const SizedBox(width: 8),
+                          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(context.t('Save'))),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -182,7 +234,7 @@ class IncomeTab extends StatelessWidget {
       return;
     }
 
-    await api.addPayment(managerId: managerId, boreId: selectedBore!.id, amount: amount, date: DateTime.now());
+    await api.addPayment(managerId: managerId, boreId: selectedBore!.id, amount: amount, date: DateTime.now(), method: paidMethod);
     await onRefresh();
   }
 

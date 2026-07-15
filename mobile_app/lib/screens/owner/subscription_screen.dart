@@ -529,8 +529,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             if (mounted) setSheetState(() => copied = false);
                           });
                         },
-                        icon: Icon(copied ? Icons.check_rounded : Icons.copy_rounded, size: 18),
-                        label: Text(copied ? context.t('Copied!') : context.t('Copy UPI ID'), style: TextStyle(fontSize: 14)),
+                        icon: Icon(copied == true ? Icons.check_rounded : Icons.copy_rounded, size: 18),
+                        label: Text(copied == true ? context.t('Copied!') : context.t('Copy UPI ID'), style: TextStyle(fontSize: 14)),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.foreground,
                           side: BorderSide(color: AppTheme.border),

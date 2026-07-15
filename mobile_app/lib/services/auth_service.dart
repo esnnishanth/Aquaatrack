@@ -134,11 +134,20 @@ class AuthService {
     required String email,
     required String phone,
     required String password,
+    bool partnership = false,
+    List<String> partnerEmails = const [],
   }) async {
     final response = await http.post(
       Uri.parse('$_authBase/signup'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': name, 'email': email, 'phone': phone, 'password': password}),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'password': password,
+        'partnership': partnership,
+        'partnerEmails': partnerEmails,
+      }),
     );
     final body = jsonDecode(response.body);
     if (response.statusCode != 201) {

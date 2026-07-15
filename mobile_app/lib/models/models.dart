@@ -108,17 +108,20 @@ class Payment {
     required this.id,
     required this.date,
     required this.amount,
+    this.method = 'cash',
   });
 
   final String id;
   final DateTime date;
   final double amount;
+  final String method;
 
   factory Payment.fromJson(Map<String, dynamic> json) {
     return Payment(
       id: json['id'] as String,
       date: parseDate(json['date']),
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      method: (json['method'] as String?) ?? 'cash',
     );
   }
 
@@ -127,6 +130,7 @@ class Payment {
       'id': id,
       'date': date.toIso8601String(),
       'amount': amount,
+      'method': method,
     };
   }
 }
@@ -282,6 +286,7 @@ class NormalExpense {
     required this.description,
     required this.amount,
     required this.date,
+    this.method = 'cash',
     this.createdBy = 'manager',
   });
 
@@ -289,6 +294,7 @@ class NormalExpense {
   final String description;
   final double amount;
   final DateTime date;
+  final String method;
   final String createdBy;
 
   factory NormalExpense.fromJson(Map<String, dynamic> json) {
@@ -297,6 +303,7 @@ class NormalExpense {
       description: (json['description'] ?? '') as String,
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
       date: parseDate(json['date']),
+      method: (json['method'] as String?) ?? 'cash',
       createdBy: (json['createdBy'] as String?) ?? 'manager',
     );
   }
@@ -307,6 +314,7 @@ class NormalExpense {
       'description': description,
       'amount': amount,
       'date': date.toIso8601String(),
+      'method': method,
       'createdBy': createdBy,
     };
   }
@@ -318,6 +326,7 @@ class LabourPayment {
     required this.workerId,
     required this.amount,
     required this.date,
+    this.method = 'cash',
     this.createdBy = 'manager',
   });
 
@@ -325,6 +334,7 @@ class LabourPayment {
   final String workerId;
   final double amount;
   final DateTime date;
+  final String method;
   final String createdBy;
 
   factory LabourPayment.fromJson(Map<String, dynamic> json) {
@@ -333,6 +343,7 @@ class LabourPayment {
       workerId: (json['workerId'] ?? '') as String,
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
       date: parseDate(json['date']),
+      method: (json['method'] as String?) ?? 'cash',
       createdBy: (json['createdBy'] as String?) ?? 'manager',
     );
   }
@@ -343,6 +354,7 @@ class LabourPayment {
       'workerId': workerId,
       'amount': amount,
       'date': date.toIso8601String(),
+      'method': method,
       'createdBy': createdBy,
     };
   }
@@ -536,4 +548,60 @@ class Manager {
           : ManagerData.empty(),
     );
   }
+}
+
+/// Parsed result from scanning a paper bore bill with the camera.
+///
+/// NOTE: commission fields are intentionally NOT part of this schema, since
+/// the printed bill no longer collects them — the manager still enters
+/// those manually after the scan.
+class BoreScanResult {
+  final String? boreNumber;
+  final DateTime? date;
+  final String? agentName;
+
+  final List<ScannedFeetEntry> feetEntries;
+  final List<ScannedPipeEntry> pipesUsed;
+
+  final double steelFeet;
+  final double steelPricePerFeet;
+  final double steelWeldingCharge;
+
+  final double totalBill;
+  final double initialPayment;
+
+  final String confidence;
+  final List<String> unclearFields;
+
+  const BoreScanResult({
+    this.boreNumber,
+    this.date,
+    this.agentName,
+    this.feetEntries = const [],
+    this.pipesUsed = const [],
+    this.steelFeet = 0,
+    this.steelPricePerFeet = 0,
+    this.steelWeldingCharge = 0,
+    this.totalBill = 0,
+    this.initialPayment = 0,
+    this.confidence = 'medium',
+    this.unclearFields = const [],
+  });
+}
+
+class ScannedFeetEntry {
+  final double length;
+  final double pricePerFeet;
+  const ScannedFeetEntry({required this.length, required this.pricePerFeet});
+}
+
+class ScannedPipeEntry {
+  final double size;
+  final double length;
+  final double pricePerPipeFoot;
+  const ScannedPipeEntry({
+    required this.size,
+    required this.length,
+    required this.pricePerPipeFoot,
+  });
 }

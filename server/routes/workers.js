@@ -76,4 +76,20 @@ router.delete('/:workerId/absences/:absenceId', async (req, res) => {
   }
 });
 
+router.put('/:workerId/absences', async (req, res) => {
+  try {
+    const worker = await Worker.findById(req.params.workerId);
+    if (!worker) return res.status(404).json({ error: 'Worker not found' });
+    const newRanges = req.body.absenceRanges || [];
+    worker.absenceRanges = newRanges.map(r => ({
+      fromDate: new Date(r.fromDate),
+      toDate: new Date(r.toDate),
+    }));
+    await worker.save();
+    res.json({ message: 'Absences replaced' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

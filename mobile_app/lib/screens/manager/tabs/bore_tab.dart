@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../../localization/ext.dart';
 import '../../../models/models.dart';
 import '../../../services/api_service.dart';
+import '../../../services/bore_bill_ocr.dart';
 import '../../../utils/formatters.dart';
 import '../../../widgets/bore_details_dialog.dart';
 import '../../../theme/app_theme.dart';
@@ -53,6 +56,12 @@ class BoreTab extends StatelessWidget {
             Wrap(
               spacing: 8,
               children: [
+                if (!readOnly)
+                  TextButton.icon(
+                    onPressed: () => _scanBillAndAddBore(context),
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    label: Text(context.t('Scan Bill')),
+                  ),
                 if (!readOnly)
                   TextButton.icon(
                     onPressed: () => _showBoreDialog(context),
@@ -112,6 +121,116 @@ class BoreTab extends StatelessWidget {
       bore.payments.fold<double>(0, (sum, payment) => sum + payment.amount);
   double _balance(Bore bore) => bore.totalBill - _paid(bore);
 
+  // ---------------------------------------------------------------------
+  // Scan Bill flow
+  // ---------------------------------------------------------------------
+
+  Future<void> _scanBillAndAddBore(BuildContext context) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(context.t('Take Photo')),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(context.t('Choose from Gallery')),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final picker = ImagePicker();
+    final XFile? picked = await picker.pickImage(
+      source: source,
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+
+    if (!context.mounted) return;
+
+    // Show a dismissible loading dialog while the bill is read.
+    bool dialogShowing = true;
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (loadingContext) => PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, _) {
+          dialogShowing = false;
+        },
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                decoration: AppTheme.glassDecoration(borderRadius: 24, opacity: 0.85),
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(
+                      context.t('Reading bill…'),
+                      style: TextStyle(color: AppTheme.foreground),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    BoreScanResult? result;
+    String? scanError;
+    try {
+      final ocr = BoreBillOcr();
+      result = await ocr.extract(picked);
+      await ocr.dispose();
+    } catch (e) {
+      scanError = e.toString();
+    }
+
+    if (dialogShowing && context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+    if (!context.mounted) return;
+
+    if (scanError != null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Scan failed: $scanError'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    }
+
+    // Open the bore dialog — with parsed data if OCR succeeded, otherwise
+    // as a blank manual-entry form.
+    final hasData = result != null &&
+        (result.feetEntries.isNotEmpty ||
+            result.pipesUsed.isNotEmpty ||
+            result.totalBill > 0);
+    await _showBoreDialog(context, prefill: hasData ? result : null);
+  }
+
   Future<void> _confirmDelete(BuildContext context, Bore bore) async {
     final api = context.read<ApiService>();
     final confirmed = await showDialog<bool>(
@@ -160,7 +279,11 @@ class BoreTab extends StatelessWidget {
     await onRefresh();
   }
 
-  Future<void> _showBoreDialog(BuildContext context, {Bore? bore}) async {
+  Future<void> _showBoreDialog(
+    BuildContext context, {
+    Bore? bore,
+    BoreScanResult? prefill,
+  }) async {
     final api = context.read<ApiService>();
     final boreNumberController = TextEditingController(
       text: bore?.boreNumber ?? _nextBoreNumber(),
@@ -171,22 +294,35 @@ class BoreTab extends StatelessWidget {
     final agentPipeCommissionController = TextEditingController(
       text: bore != null ? bore.agentCommissionPerPipeFoot.toStringAsFixed(0) : '',
     );
-    final agentController = TextEditingController(text: bore?.agentName ?? '');
+    final agentController = TextEditingController(
+      text: bore?.agentName ?? prefill?.agentName ?? '',
+    );
     final initialPaymentController = TextEditingController(
       text: bore?.payments.isNotEmpty == true
           ? bore!.payments.first.amount.toStringAsFixed(0)
-          : '',
+          : ((prefill?.initialPayment ?? 0) > 0
+              ? prefill!.initialPayment.toStringAsFixed(0)
+              : ''),
     );
-    Agent? selectedAgent = bore != null
-        ? agents.where((a) => a.name == bore.agentName).firstOrNull
+    String initialPaymentMethod = bore?.payments.isNotEmpty == true
+        ? bore!.payments.first.method
+        : 'cash';
+    final agentNameToMatch = bore?.agentName ?? prefill?.agentName;
+    final agentNameLower = agentNameToMatch?.toLowerCase().trim();
+    Agent? selectedAgent = agentNameLower != null && agentNameLower.isNotEmpty
+        ? agents.where((a) => a.name.toLowerCase().trim() == agentNameLower).firstOrNull
         : null;
-    DateTime selectedDate = bore?.date ?? DateTime.now();
+    final agentWarning = prefill?.agentName != null && selectedAgent == null;
+    bool feetCommError = false;
+    bool pipeCommError = false;
+    bool steelCommError = false;
+    DateTime selectedDate = bore?.date ?? prefill?.date ?? DateTime.now();
 
     final feetLengthCtrl = <TextEditingController>[];
     final feetRateCtrl = <TextEditingController>[];
     final feetFocusNodes = <FocusNode>[];
 
-    void _initFeet(double length, double rate) {
+    void initFeet(double length, double rate) {
       feetLengthCtrl.add(TextEditingController(text: length > 0 ? length.toStringAsFixed(0) : ''));
       feetRateCtrl.add(TextEditingController(text: rate > 0 ? rate.toStringAsFixed(0) : ''));
       feetFocusNodes.add(FocusNode());
@@ -194,19 +330,25 @@ class BoreTab extends StatelessWidget {
 
     if (bore != null) {
       for (final e in bore.feetEntries) {
-        _initFeet(e.length, e.pricePerFeet);
+        initFeet(e.length, e.pricePerFeet);
+      }
+    } else if (prefill != null && prefill.feetEntries.isNotEmpty) {
+      for (final e in prefill.feetEntries) {
+        initFeet(e.length, e.pricePerFeet);
       }
     } else {
-      _initFeet(0, 0);
+      initFeet(0, 0);
     }
 
     final pipeSizeValues = <double>[];
     final pipeLengthCtrl = <TextEditingController>[];
     final pipePriceCtrl = <TextEditingController>[];
     final pipeFocusNodes = <FocusNode>[];
+    final pipeStockWarning = <bool>[];
 
-    void _initPipe(double size, double length, double price) {
+    void initPipe(double size, double length, double price) {
       pipeSizeValues.add(size);
+      pipeStockWarning.add(size > 0 && !pipeStock.any((s) => s.size == size));
       pipeLengthCtrl.add(TextEditingController(text: length > 0 ? length.toStringAsFixed(0) : ''));
       pipePriceCtrl.add(TextEditingController(text: price > 0 ? price.toStringAsFixed(0) : ''));
       pipeFocusNodes.add(FocusNode());
@@ -214,16 +356,22 @@ class BoreTab extends StatelessWidget {
 
     if (bore != null) {
       for (final e in bore.pipesUsed) {
-        _initPipe(e.size, e.length, e.pricePerPipeFoot);
+        initPipe(e.size, e.length, e.pricePerPipeFoot);
+      }
+    } else if (prefill != null && prefill.pipesUsed.isNotEmpty) {
+      for (final e in prefill.pipesUsed) {
+        initPipe(e.size, e.length, e.pricePerPipeFoot);
       }
     } else {
-      _initPipe(0, 0, 0);
+      initPipe(0, 0, 0);
     }
 
-    double steelFeet = bore?.steelFeet ?? 0;
-    double steelPricePerFeet = bore?.steelPricePerFeet ?? 0;
+    double steelFeet = bore?.steelFeet ?? prefill?.steelFeet ?? 0;
+    double steelPricePerFeet = bore?.steelPricePerFeet ?? prefill?.steelPricePerFeet ?? 0;
+    // Steel agent commission isn't printed on the bill, so it's never
+    // pre-filled from a scan — only carried over when editing an existing bore.
     double steelAgentCommission = bore?.steelAgentCommission ?? 0;
-    double steelWeldingCharge = bore?.steelWeldingCharge ?? 0;
+    double steelWeldingCharge = bore?.steelWeldingCharge ?? prefill?.steelWeldingCharge ?? 0;
 
     double computeTotal() {
       double boreCost = 0;
@@ -245,7 +393,7 @@ class BoreTab extends StatelessWidget {
     Future<void> addFeetEntry(StateSetter setState) async {
       final node = FocusNode();
       setState(() {
-        _initFeet(0, 0);
+        initFeet(0, 0);
         feetFocusNodes.add(node);
       });
       WidgetsBinding.instance.addPostFrameCallback((_) => node.requestFocus());
@@ -254,13 +402,13 @@ class BoreTab extends StatelessWidget {
     Future<void> addPipeEntry(StateSetter setState) async {
       final node = FocusNode();
       setState(() {
-        _initPipe(0, 0, 0);
+        initPipe(0, 0, 0);
         pipeFocusNodes.add(node);
       });
       WidgetsBinding.instance.addPostFrameCallback((_) => node.requestFocus());
     }
 
-    Future<void> _showSteelDialog(BuildContext context, StateSetter setState) async {
+    Future<void> showSteelDialog(BuildContext context, StateSetter setState) async {
       final feetCtrl = TextEditingController(text: steelFeet > 0 ? steelFeet.toStringAsFixed(0) : '');
       final priceCtrl = TextEditingController(text: steelPricePerFeet > 0 ? steelPricePerFeet.toStringAsFixed(0) : '');
       final agentCommCtrl = TextEditingController(text: steelAgentCommission > 0 ? steelAgentCommission.toStringAsFixed(0) : '');
@@ -404,9 +552,41 @@ class BoreTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        bore == null ? context.t('Add Bore') : context.t('Edit Bore'),
+                        bore != null
+                            ? context.t('Edit Bore')
+                            : (prefill != null
+                                ? context.t('Review Scanned Bore')
+                                : context.t('Add Bore')),
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.foreground),
                       ),
+                      if (prefill != null &&
+                          (prefill.confidence == 'low' || prefill.unclearFields.isNotEmpty))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    prefill.unclearFields.isNotEmpty
+                                        ? '${context.t("Please double-check")}: ${prefill.unclearFields.join(", ")}'
+                                        : context.t('Some fields may not be accurate — please double-check before saving.'),
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: boreNumberController,
@@ -433,6 +613,7 @@ class BoreTab extends StatelessWidget {
                         controller: agentCommissionController,
                         decoration: InputDecoration(
                           labelText: context.t('Agent Commission Per Feet'),
+                          errorText: feetCommError ? context.t('Value required') : null,
                           
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -478,6 +659,22 @@ class BoreTab extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (agentWarning)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 18),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  context.t('Scanned agent not in list — type name below'),
+                                  style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: agentController,
@@ -607,8 +804,8 @@ class BoreTab extends StatelessWidget {
                             children: [
                               Expanded(
                                 flex: 2,
-                                child: DropdownButtonFormField<double>(
-                                  value: pipeSizeValues[index] > 0 ? pipeSizeValues[index] : null,
+                                  child: DropdownButtonFormField<double>(
+                                    value: pipeSizeValues[index] > 0 && !pipeStockWarning[index] ? pipeSizeValues[index] : null,
                                   focusNode: pipeFocusNodes[index],
                                   style: TextStyle(fontSize: 13, color: AppTheme.foreground),
                                   decoration: InputDecoration(
@@ -638,11 +835,22 @@ class BoreTab extends StatelessWidget {
                                       .toList(),
                                   onChanged: (val) {
                                     if (val != null) {
-                                      setState(() => pipeSizeValues[index] = val);
+                                      setState(() {
+                                        pipeSizeValues[index] = val;
+                                        pipeStockWarning[index] = false;
+                                      });
                                     }
                                   },
                                 ),
                               ),
+                              if (pipeStockWarning[index])
+                                Tooltip(
+                                  message: context.t('Pipe size not in stock'),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 4),
+                                    child: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 20),
+                                  ),
+                                ),
                               const SizedBox(width: 6),
                               Expanded(
                                 flex: 2,
@@ -703,14 +911,15 @@ class BoreTab extends StatelessWidget {
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline),
                                   onPressed: () => setState(() {
-                                    pipeLengthCtrl[index].dispose();
-                                    pipePriceCtrl[index].dispose();
-                                    pipeFocusNodes[index].dispose();
-                                    pipeSizeValues.removeAt(index);
-                                    pipeLengthCtrl.removeAt(index);
-                                    pipePriceCtrl.removeAt(index);
-                                    pipeFocusNodes.removeAt(index);
-                                  }),
+                                      pipeLengthCtrl[index].dispose();
+                                      pipePriceCtrl[index].dispose();
+                                      pipeFocusNodes[index].dispose();
+                                      pipeSizeValues.removeAt(index);
+                                      pipeStockWarning.removeAt(index);
+                                      pipeLengthCtrl.removeAt(index);
+                                      pipePriceCtrl.removeAt(index);
+                                      pipeFocusNodes.removeAt(index);
+                                    }),
                                 ),
                             ],
                           ),
@@ -726,7 +935,7 @@ class BoreTab extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             TextButton.icon(
-                              onPressed: () => _showSteelDialog(context, setState),
+                              onPressed: () => showSteelDialog(context, setState),
                               icon: const Icon(Icons.add),
                               label: Text(context.t('Steel')),
                             ),
@@ -755,7 +964,7 @@ class BoreTab extends StatelessWidget {
                                 if (!readOnly)
                                   IconButton(
                                     icon: const Icon(Icons.edit, size: 16),
-                                    onPressed: () => _showSteelDialog(context, setState),
+                                    onPressed: () => showSteelDialog(context, setState),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                   ),
@@ -763,11 +972,20 @@ class BoreTab extends StatelessWidget {
                             ),
                           ),
                         ),
+                      if (steelCommError)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            context.t('Steel Agent Commission required'),
+                            style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: agentPipeCommissionController,
                         decoration: InputDecoration(
                           labelText: context.t('Agent Commission Per Pipe Foot'),
+                          errorText: pipeCommError ? context.t('Value required') : null,
                           
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -795,6 +1013,7 @@ class BoreTab extends StatelessWidget {
                       const SizedBox(height: 12),
                       TextField(
                         controller: initialPaymentController,
+                        onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(
                           labelText: context.t('Initial Payment'),
                           
@@ -812,6 +1031,57 @@ class BoreTab extends StatelessWidget {
                           ),
                         ),
                         keyboardType: TextInputType.number,
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        child: (double.tryParse(initialPaymentController.text) ?? 0) > 0
+                            ? Container(
+                                margin: const EdgeInsets.only(top: 12),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppTheme.border),
+                                ),
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      context.t('Select Paid Method'),
+                                      style: TextStyle(fontSize: 13, color: AppTheme.mutedForeground),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Radio<String>(
+                                                value: 'cash',
+                                                groupValue: initialPaymentMethod,
+                                                onChanged: (v) => setState(() => initialPaymentMethod = v!),
+                                              ),
+                                              Text(context.t('Cash')),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Radio<String>(
+                                                value: 'account',
+                                                groupValue: initialPaymentMethod,
+                                                onChanged: (v) => setState(() => initialPaymentMethod = v!),
+                                              ),
+                                              Text(context.t('Account')),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : const SizedBox.shrink(),
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -835,7 +1105,23 @@ class BoreTab extends StatelessWidget {
                               ],
                             ),
                             child: ElevatedButton(
-                              onPressed: () => Navigator.of(context).pop(true),
+                              onPressed: () {
+                                final hasFeet = feetLengthCtrl.any((c) => (double.tryParse(c.text) ?? 0) > 0);
+                                final hasPipe = pipeLengthCtrl.any((c) => (double.tryParse(c.text) ?? 0) > 0);
+                                final hasSteel = steelFeet > 0;
+                                final fErr = hasFeet && (double.tryParse(agentCommissionController.text) ?? 0) <= 0;
+                                final pErr = hasPipe && (double.tryParse(agentPipeCommissionController.text) ?? 0) <= 0;
+                                final sErr = hasSteel && steelAgentCommission <= 0;
+                                if (fErr || pErr || sErr) {
+                                  setState(() {
+                                    feetCommError = fErr;
+                                    pipeCommError = pErr;
+                                    steelCommError = sErr;
+                                  });
+                                  return;
+                                }
+                                Navigator.of(context).pop(true);
+                              },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 foregroundColor: Colors.white,
@@ -945,6 +1231,7 @@ class BoreTab extends StatelessWidget {
         agentName: (selectedAgent?.name ?? agentController.text.trim()),
         totalBill: totalBill,
         initialPayment: double.tryParse(initialPaymentController.text) ?? 0,
+        initialPaymentMethod: initialPaymentMethod,
         pipeLogs: pipeLogsPayload,
         steelFeet: steelFeet,
         steelPricePerFeet: steelPricePerFeet,
@@ -968,6 +1255,7 @@ class BoreTab extends StatelessWidget {
         agentName: (selectedAgent?.name ?? agentController.text.trim()),
         totalBill: totalBill,
         initialPayment: double.tryParse(initialPaymentController.text) ?? 0,
+        initialPaymentMethod: initialPaymentMethod,
         pipeLogs: pipeLogsPayload,
         steelFeet: steelFeet,
         steelPricePerFeet: steelPricePerFeet,

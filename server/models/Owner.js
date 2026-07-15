@@ -18,6 +18,8 @@ const ownerSchema = new mongoose.Schema({
   managersUsed: { type: Number, default: 0 },
   pricePerManager: { type: Number, default: 300 },
   spin: { type: String, default: '' },
+  partnership: { type: Boolean, default: false },
+  partnerEmails: [{ type: String }],
   subscriptionDisabled: { type: Boolean, default: false },
   subscription: {
     plan: { type: String, enum: ['free', 'basic', 'premium'], default: 'free' },

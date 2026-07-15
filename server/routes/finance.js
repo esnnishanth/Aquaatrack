@@ -6,11 +6,12 @@ const Worker = require('../models/Worker');
 
 router.post('/normal-expenses', async (req, res) => {
   try {
-    const { description, amount, date, createdBy } = req.body;
+    const { description, amount, date, method, createdBy } = req.body;
     const expense = await NormalExpense.create({
       description,
       amount,
       date: new Date(date),
+      method: method || 'cash',
       createdBy: createdBy || 'manager',
       managerId: req.params.managerId,
     });
@@ -31,11 +32,12 @@ router.delete('/normal-expenses/:expenseId', async (req, res) => {
 
 router.post('/labour-payments', async (req, res) => {
   try {
-    const { workerId, amount, date, createdBy } = req.body;
+    const { workerId, amount, date, method, createdBy } = req.body;
     const payment = await LabourPayment.create({
       workerId,
       amount,
       date: new Date(date),
+      method: method || 'cash',
       createdBy: createdBy || 'manager',
       managerId: req.params.managerId,
     });

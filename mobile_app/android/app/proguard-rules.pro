@@ -9,6 +9,7 @@
 # Keep Gson/JSON serialization models
 -keep class com.example.mobile_app.** { *; }
 
+
 # Play Core (optional, not used) — just warn about missing refs
 -dontwarn com.google.android.play.core.splitcompat.SplitCompatApplication
 -dontwarn com.google.android.play.core.splitinstall.SplitInstallException

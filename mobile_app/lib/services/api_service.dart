@@ -213,7 +213,7 @@ class ApiService {
         'name': name,
         'vehicleNumber': vehicleNumber,
         'password': password,
-        if (ownerId != null) 'ownerId': ownerId,
+        'ownerId': ?ownerId,
       }),
     );
     if (response.statusCode != 201) {
@@ -293,6 +293,7 @@ class ApiService {
     required String agentName,
     required double totalBill,
     required double initialPayment,
+    String initialPaymentMethod = 'cash',
     required List<PipeLog> pipeLogs,
     double steelFeet = 0,
     double steelPricePerFeet = 0,
@@ -314,6 +315,7 @@ class ApiService {
         'agentName': agentName,
         'totalBill': totalBill,
         'initialPayment': initialPayment,
+        'initialPaymentMethod': initialPaymentMethod,
         'pipeLogs': pipeLogs.map((l) => l.toJson()).toList(),
         'steelFeet': steelFeet,
         'steelPricePerFeet': steelPricePerFeet,
@@ -340,6 +342,7 @@ class ApiService {
     required String agentName,
     required double totalBill,
     required double initialPayment,
+    String initialPaymentMethod = 'cash',
     required List<PipeLog> pipeLogs,
     double steelFeet = 0,
     double steelPricePerFeet = 0,
@@ -361,6 +364,7 @@ class ApiService {
         'agentName': agentName,
         'totalBill': totalBill,
         'initialPayment': initialPayment,
+        'initialPaymentMethod': initialPaymentMethod,
         'pipeLogs': pipeLogs.map((l) => l.toJson()).toList(),
         'steelFeet': steelFeet,
         'steelPricePerFeet': steelPricePerFeet,
@@ -394,11 +398,11 @@ class ApiService {
     );
   }
 
-  Future<void> addPayment({required String managerId, required String boreId, required double amount, required DateTime date}) async {
+  Future<void> addPayment({required String managerId, required String boreId, required double amount, required DateTime date, String method = 'cash'}) async {
     final response = await http.post(
       Uri.parse('$_api/managers/$managerId/bores/$boreId/payments'),
       headers: await _jsonHeaders(),
-      body: jsonEncode({'amount': amount, 'date': date.toIso8601String()}),
+      body: jsonEncode({'amount': amount, 'date': date.toIso8601String(), 'method': method}),
     );
     if (response.statusCode != 201) {
       throw Exception('Failed to add payment');
@@ -414,7 +418,7 @@ class ApiService {
 
   // ─── Normal Expense CRUD ─────────────────────────────────────────────
 
-  Future<void> addNormalExpense({required String managerId, required String description, required double amount, required DateTime date, String createdBy = 'manager'}) async {
+  Future<void> addNormalExpense({required String managerId, required String description, required double amount, required DateTime date, String method = 'cash', String createdBy = 'manager'}) async {
     final response = await http.post(
       Uri.parse('$_api/managers/$managerId/normal-expenses'),
       headers: await _jsonHeaders(),
@@ -422,6 +426,7 @@ class ApiService {
         'description': description,
         'amount': amount,
         'date': date.toIso8601String(),
+        'method': method,
         'createdBy': createdBy,
       }),
     );
@@ -439,7 +444,7 @@ class ApiService {
 
   // ─── Labour Payment CRUD ─────────────────────────────────────────────
 
-  Future<void> addLabourPayment({required String managerId, required String workerId, required double amount, required DateTime date, String createdBy = 'manager'}) async {
+  Future<void> addLabourPayment({required String managerId, required String workerId, required double amount, required DateTime date, String method = 'cash', String createdBy = 'manager'}) async {
     final response = await http.post(
       Uri.parse('$_api/managers/$managerId/labour-payments'),
       headers: await _jsonHeaders(),
@@ -447,6 +452,7 @@ class ApiService {
         'workerId': workerId,
         'amount': amount,
         'date': date.toIso8601String(),
+        'method': method,
         'createdBy': createdBy,
       }),
     );
@@ -488,6 +494,25 @@ class ApiService {
       Uri.parse('$_api/managers/$managerId/pipe-stock/$size'),
       headers: await _jsonHeaders(),
     );
+  }
+
+  // ─── Bore Image Extraction ────────────────────────────────────────────
+  // Thin wrapper around the server OCR endpoint.
+  // When unavailable, the caller gracefully falls back to the manual dialog.
+  Future<Map<String, dynamic>> extractBoreFromImage({
+    required String managerId,
+    required List<int> imageBytes,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_api/managers/$managerId/bores/extract'),
+      headers: await _jsonHeaders(),
+      body: imageBytes,
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    final err = jsonDecode(response.body);
+    throw Exception(err['error'] ?? 'OCR service unavailable');
   }
 
   // ─── Worker CRUD ─────────────────────────────────────────────────────
@@ -552,5 +577,20 @@ class ApiService {
       Uri.parse('$_api/managers/$managerId/workers/$workerId/absences/$absenceId'),
       headers: await _jsonHeaders(),
     );
+  }
+
+  Future<void> replaceWorkerAbsences({
+    required String managerId,
+    required String workerId,
+    required List<Map<String, String>> absenceRanges,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_api/managers/$managerId/workers/$workerId/absences'),
+      headers: await _jsonHeaders(),
+      body: jsonEncode({'absenceRanges': absenceRanges}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to replace absences');
+    }
   }
 }

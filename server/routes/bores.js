@@ -31,14 +31,14 @@ router.post('/', async (req, res) => {
       date, boreNumber, totalFeet, pricePerFeet,
       agentCommissionPerFeet, agentCommissionPerPipeFoot,
       pipesUsed, feetEntries, agentName, totalBill,
-      initialPayment, pipeLogs,
+      initialPayment, initialPaymentMethod, pipeLogs,
       steelFeet, steelPricePerFeet, steelAgentCommission, steelWeldingCharge,
     } = req.body;
     const managerId = req.params.managerId;
 
     const payments = [];
     if (initialPayment > 0) {
-      payments.push({ date: new Date(), amount: initialPayment });
+      payments.push({ date: new Date(), amount: initialPayment, method: initialPaymentMethod || 'cash' });
     }
 
     const bore = await Bore.create({
@@ -88,7 +88,7 @@ router.put('/:boreId', async (req, res) => {
       date, boreNumber, totalFeet, pricePerFeet,
       agentCommissionPerFeet, agentCommissionPerPipeFoot,
       pipesUsed, feetEntries, agentName, totalBill,
-      initialPayment, pipeLogs,
+      initialPayment, initialPaymentMethod, pipeLogs,
       steelFeet, steelPricePerFeet, steelAgentCommission, steelWeldingCharge,
     } = req.body;
     const managerId = req.params.managerId;
@@ -101,7 +101,7 @@ router.put('/:boreId', async (req, res) => {
 
     const payments = oldBore.payments || [];
     if (initialPayment > 0 && payments.length === 0) {
-      payments.push({ date: new Date(), amount: initialPayment });
+      payments.push({ date: new Date(), amount: initialPayment, method: initialPaymentMethod || 'cash' });
     }
 
     await Bore.findByIdAndUpdate(boreId, {
@@ -172,7 +172,7 @@ router.post('/:boreId/payments', async (req, res) => {
   try {
     const bore = await Bore.findById(req.params.boreId);
     if (!bore) return res.status(404).json({ error: 'Bore not found' });
-    const payment = { date: new Date(req.body.date), amount: req.body.amount };
+    const payment = { date: new Date(req.body.date), amount: req.body.amount, method: req.body.method || 'cash' };
     bore.payments.push(payment);
     await bore.save();
     const newPayment = bore.payments[bore.payments.length - 1];

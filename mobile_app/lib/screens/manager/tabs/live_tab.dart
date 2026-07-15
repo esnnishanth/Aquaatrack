@@ -185,7 +185,7 @@ class _SummaryRow extends StatelessWidget {
                 ),
           ),
           Text(
-            '${currencyInr.format(value)}',
+            currencyInr.format(value),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
                   color: isPositive ? AppTheme.success : AppTheme.destructive,

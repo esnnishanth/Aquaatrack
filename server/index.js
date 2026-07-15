@@ -11,11 +11,14 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '15mb' }));
 app.use(cookieParser());
 
 // ── MongoDB connection ────────────────────────────────────────────────────────
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/aquatrack';
+
+// OCR-bore-bill does NOT need MongoDB (calls Gemini API directly).
+app.use('/api', require('./routes/ocr'));
 
 // ── Middleware: wait for MongoDB ───────────────────────────────────────────────
 app.use(async (req, res, next) => {
@@ -57,7 +60,6 @@ app.use('/api/managers/:managerId/workers', require('./routes/workers'));
 app.use('/api/managers/:managerId', require('./routes/finance'));
 app.use('/api/managers/:managerId', require('./routes/pipe'));
 app.use('/api/auth', require('./routes/auth').router);
-
 // ── Email OTP (MongoDB-backed for serverless) ─────────────────────────────────
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();

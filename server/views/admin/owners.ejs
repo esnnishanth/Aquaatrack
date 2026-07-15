@@ -19,7 +19,7 @@
         <div id="ownerContent" style="display:none">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Subscription</th><th>Managers</th><th>Created</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Partnership</th><th>Status</th><th>Subscription</th><th>Managers</th><th>Created</th><th>Actions</th></tr></thead>
               <tbody id="ownersBody"></tbody>
             </table>
           </div>
@@ -173,9 +173,35 @@
     </div>
   </div>
 
+  <!-- Partner Emails Modal -->
+  <div class="modal-overlay" id="partnerEmailsModal">
+    <div class="modal" style="max-width:420px">
+      <h3>Partner Email(s)</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;" id="partnerOwnerName"></p>
+      <div id="partnerEmailsList" style="max-height:300px;overflow-y:auto;"></div>
+      <div class="btn-row" style="margin-top:12px;"><button class="btn btn-outline" onclick="closeModal('partnerEmailsModal')">Close</button></div>
+    </div>
+  </div>
+
   <%- include('_scripts') %>
   <script>
     let owners = [];
+
+    function showPartnerEmails(id) {
+      const o = owners.find(x => (x._id || x.id) === id);
+      if (!o) return;
+      document.getElementById('partnerOwnerName').textContent = 'Partner emails for ' + escapeHtml(o.name);
+      const list = document.getElementById('partnerEmailsList');
+      const emails = o.partnerEmails || [];
+      if (emails.length === 0) {
+        list.innerHTML = '<div class="empty"><p>No partner emails</p></div>';
+      } else {
+        list.innerHTML = '<ul style="list-style:none;padding:0;margin:0;">' +
+          emails.map(e => '<li style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">' + escapeHtml(e) + '</li>').join('') +
+          '</ul>';
+      }
+      openModal('partnerEmailsModal');
+    }
 
     function closeModal(id) { document.getElementById(id).classList.remove('show'); }
     function openModal(id) { document.getElementById(id).classList.add('show'); }
@@ -208,6 +234,9 @@
         <td><a href="/admin/owners/${o._id || o.id}"${locked ? ' style="color:#c62828;"' : ' style="color:#1565c0;"'}>${escapeHtml(o.name)}</a></td>
         <td>${escapeHtml(o.email)}</td>
         <td>${o.phone ? escapeHtml(o.phone) : '-'}</td>
+        <td style="text-align:center;">${o.partnership
+          ? '<button class="btn btn-sm btn-primary" onclick="showPartnerEmails(\'' + (o._id || o.id) + '\')" title="View partner emails">&#129309; Partner</button>'
+          : '<span style="color:#999;font-size:12px;">—</span>'}</td>
         <td>${statusBadge}</td>
         <td>${subBadge}</td>
         <td style="text-align:center;font-size:13px;">${mgrDisplay}</td>

@@ -79,6 +79,7 @@ async function buildManagerResponse(manager) {
           id: p._id.toString(),
           date: p.date,
           amount: p.amount,
+          method: p.method || 'cash',
         })),
       })),
       normalExpenses: normalExpenses.map(e => ({
@@ -86,6 +87,7 @@ async function buildManagerResponse(manager) {
         description: e.description,
         amount: e.amount,
         date: e.date,
+        method: e.method || 'cash',
         createdBy: e.createdBy,
       })),
       labourPayments: labourPayments.map(l => ({
@@ -93,6 +95,7 @@ async function buildManagerResponse(manager) {
         workerId: l.workerId.toString(),
         amount: l.amount,
         date: l.date,
+        method: l.method || 'cash',
         createdBy: l.createdBy,
       })),
       pipeLogs: pipeLogs.map(p => ({

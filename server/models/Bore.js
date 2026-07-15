@@ -14,6 +14,7 @@ const feetEntrySchema = new mongoose.Schema({
 const paymentSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   amount: { type: Number, required: true },
+  method: { type: String, default: 'cash' },
 }, { _id: true });
 
 const boreSchema = new mongoose.Schema({

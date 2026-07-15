@@ -28,7 +28,20 @@ class LabourTab extends StatelessWidget {
     final jd = worker.joiningDate;
     if (jd == null) return -worker.amountPaid;
     final now = DateTime.now();
-    final absences = worker.absenceRanges ?? [];
+
+    final absentSet = <String>{};
+    for (final a in worker.absenceRanges ?? <WorkerAbsenceRange>[]) {
+      final fromNorm = DateTime(a.fromDate.year, a.fromDate.month, a.fromDate.day);
+      final toNorm = DateTime(a.toDate.year, a.toDate.month, a.toDate.day);
+      final start = fromNorm.isBefore(jd) ? DateTime(jd.year, jd.month, jd.day) : fromNorm;
+      if (start.isAfter(now)) continue;
+      final effEnd = (a.toDate.year >= 9999 || toNorm.isAfter(now)) ? now : toNorm;
+      var cur = start;
+      while (!cur.isAfter(effEnd)) {
+        absentSet.add('${cur.year}-${cur.month}-${cur.day}');
+        cur = cur.add(const Duration(days: 1));
+      }
+    }
 
     double earned = 0;
     DateTime cursor = DateTime(jd.year, jd.month, jd.day);
@@ -39,12 +52,12 @@ class LabourTab extends StatelessWidget {
       final periodEnd = monthEnd.isBefore(now) ? monthEnd : now;
 
       int absentInPeriod = 0;
-      for (final a in absences) {
-        final fromNorm = DateTime(a.fromDate.year, a.fromDate.month, a.fromDate.day);
-        final toNorm = DateTime(a.toDate.year, a.toDate.month, a.toDate.day);
-        final os = fromNorm.isAfter(cursor) ? fromNorm : cursor;
-        final oe = toNorm.isBefore(periodEnd) ? toNorm : periodEnd;
-        if (!os.isAfter(oe)) absentInPeriod += oe.difference(os).inDays + 1;
+      var cur = cursor;
+      while (!cur.isAfter(periodEnd)) {
+        if (absentSet.contains('${cur.year}-${cur.month}-${cur.day}')) {
+          absentInPeriod++;
+        }
+        cur = cur.add(const Duration(days: 1));
       }
 
       final daysInPeriod = periodEnd.difference(cursor).inDays + 1;
@@ -342,25 +355,32 @@ class LabourTab extends StatelessWidget {
 
   Future<void> _showAttendanceDialog(BuildContext context, {required Worker worker}) async {
     final now = DateTime.now();
-    DateTime? _jd = worker.joiningDate;
+    DateTime? joinDate = worker.joiningDate;
 
     final allAbsences = worker.absenceRanges ?? <WorkerAbsenceRange>[];
 
-    int totalAbsentDays = 0;
-    for (final absence in allAbsences) {
-      final effStart = _jd != null && absence.fromDate.isBefore(_jd!) ? _jd! : absence.fromDate;
-      if (effStart.isAfter(now)) continue;
-      final effEnd = absence.toDate.isAfter(now) ? now : absence.toDate;
-      if (effEnd.isBefore(effStart)) continue;
-      totalAbsentDays += effEnd.difference(effStart).inDays + 1;
+    final absentSet = <String>{};
+    for (final a in allAbsences) {
+      final fromNorm = DateTime(a.fromDate.year, a.fromDate.month, a.fromDate.day);
+      final toNorm = DateTime(a.toDate.year, a.toDate.month, a.toDate.day);
+      final start = joinDate != null && fromNorm.isBefore(joinDate) ? DateTime(joinDate.year, joinDate.month, joinDate.day) : fromNorm;
+      if (start.isAfter(now)) continue;
+      final effEnd = (a.toDate.year >= 9999 || toNorm.isAfter(now)) ? now : toNorm;
+      var cur = start;
+      while (!cur.isAfter(effEnd)) {
+        absentSet.add('${cur.year}-${cur.month}-${cur.day}');
+        cur = cur.add(const Duration(days: 1));
+      }
     }
+
+    int totalAbsentDays = absentSet.length;
 
     int totalEligibleDays = 0;
-    if (_jd != null) {
-      totalEligibleDays = now.difference(_jd!).inDays + 1;
+    if (joinDate != null) {
+      totalEligibleDays = now.difference(joinDate).inDays + 1;
     }
 
-    final presentDays = totalEligibleDays - totalAbsentDays;
+    final presentDays = (totalEligibleDays - totalAbsentDays).clamp(0, totalEligibleDays);
 
     await showDialog<void>(
       context: context,
@@ -374,7 +394,7 @@ class LabourTab extends StatelessWidget {
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
-                      initialDate: _jd ?? now,
+                      initialDate: joinDate ?? now,
                       firstDate: DateTime(2000),
                       lastDate: now,
                     );
@@ -391,7 +411,7 @@ class LabourTab extends StatelessWidget {
                         );
                         await onRefresh();
                         if (context.mounted) {
-                          _jd = picked;
+                          joinDate = picked;
                           setState(() {});
                         }
                       } catch (_) {}
@@ -409,7 +429,7 @@ class LabourTab extends StatelessWidget {
                         const Icon(Icons.calendar_today, size: 14),
                         const SizedBox(width: 4),
                         Text(
-                          _jd != null ? 'Join: ${_jd!.day}/${_jd!.month}/${_jd!.year}' : 'Join: Not set',
+                          joinDate != null ? 'Join: ${joinDate!.day}/${joinDate!.month}/${joinDate!.year}' : 'Join: Not set',
                           style: const TextStyle(fontSize: 12),
                         ),
                       ],
@@ -450,7 +470,7 @@ class LabourTab extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.of(context).pop();
-                      _markAttendanceCalendar(context, worker: worker, effectiveJoiningDate: _jd);
+                      _markAttendanceCalendar(context, worker: worker, effectiveJoiningDate: joinDate);
                     },
                     icon: const Icon(Icons.calendar_month_outlined),
                     label: const Text('Mark Attendance'),
@@ -473,43 +493,72 @@ class LabourTab extends StatelessWidget {
     final api = context.read<ApiService>();
     final now = DateTime.now();
     final jd = effectiveJoiningDate ?? worker.joiningDate;
+    final jdNorm = jd != null ? DateTime(jd.year, jd.month, jd.day) : null;
+
     int viewMonth = selectedMonth;
     int viewYear = selectedYear;
 
-    final monthState = <String, Set<int>>{};
-    DateTime? _absentFromDate;
+    String dk(int y, int m, int d) => '$y-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
 
-    Set<int> presentSet() {
-      final key = '$viewYear-$viewMonth';
-      if (!monthState.containsKey(key)) {
-        final dim = DateTime(viewYear, viewMonth + 1, 0).day;
-        final s = <int>{};
-        for (var d = 1; d <= dim; d++) {
-          final dt = DateTime(viewYear, viewMonth, d);
-          bool abs = false;
-          if (jd != null) {
-            final jdNorm = DateTime(jd.year, jd.month, jd.day);
-            if (dt.isBefore(jdNorm)) abs = true;
-          }
-          if (!abs) {
-            for (final a in (worker.absenceRanges ?? <WorkerAbsenceRange>[])) {
-              final fromNorm = DateTime(a.fromDate.year, a.fromDate.month, a.fromDate.day);
-              final toNorm = DateTime(a.toDate.year, a.toDate.month, a.toDate.day);
-              if (!dt.isBefore(fromNorm) && !dt.isAfter(toNorm)) {
-                abs = true;
-                break;
-              }
-            }
-          }
-          if (!abs && _absentFromDate != null) {
-            final afdNorm = DateTime(_absentFromDate!.year, _absentFromDate!.month, _absentFromDate!.day);
-            if (!dt.isBefore(afdNorm)) abs = true;
-          }
-          if (!abs) s.add(d);
-        }
-        monthState[key] = s;
+    final absentDays = <String>{};
+    for (final a in worker.absenceRanges ?? <WorkerAbsenceRange>[]) {
+      final fromNorm = DateTime(a.fromDate.year, a.fromDate.month, a.fromDate.day);
+      final toNorm = DateTime(a.toDate.year, a.toDate.month, a.toDate.day);
+      final start = jdNorm != null && fromNorm.isBefore(jdNorm) ? jdNorm : fromNorm;
+      final effEnd = (a.toDate.year >= 9999 || toNorm.isAfter(now)) ? now : toNorm;
+      var cur = start;
+      while (!cur.isAfter(effEnd)) {
+        absentDays.add(dk(cur.year, cur.month, cur.day));
+        cur = cur.add(const Duration(days: 1));
       }
-      return monthState[key]!;
+    }
+
+    bool ongoing = false;
+
+    bool isPresent(int y, int m, int d) {
+      final dt = DateTime(y, m, d);
+      if (jdNorm != null && dt.isBefore(jdNorm)) return false;
+      if (dt.isAfter(now)) return false;
+      return !absentDays.contains(dk(y, m, d));
+    }
+
+    bool isDisabled(int y, int m, int d) {
+      final dt = DateTime(y, m, d);
+      if (jdNorm != null && dt.isBefore(jdNorm)) return true;
+      if (dt.isAfter(now)) return true;
+      return false;
+    }
+
+    void toggleDay(int y, int m, int d) {
+      final key = dk(y, m, d);
+      if (absentDays.contains(key)) {
+        absentDays.remove(key);
+      } else {
+        absentDays.add(key);
+      }
+    }
+
+    void toggleRangeFrom(DateTime dt) {
+      bool anyAbsent = false;
+      var cur = dt;
+      while (!cur.isAfter(now)) {
+        if (absentDays.contains(dk(cur.year, cur.month, cur.day))) {
+          anyAbsent = true;
+          break;
+        }
+        cur = cur.add(const Duration(days: 1));
+      }
+      cur = dt;
+      while (!cur.isAfter(now)) {
+        final key = dk(cur.year, cur.month, cur.day);
+        if (anyAbsent) {
+          absentDays.remove(key);
+        } else {
+          absentDays.add(key);
+        }
+        cur = cur.add(const Duration(days: 1));
+      }
+      ongoing = !anyAbsent;
     }
 
     final monthNames = [
@@ -519,16 +568,6 @@ class LabourTab extends StatelessWidget {
 
     bool canGoPrev() => !(viewYear == 2000 && viewMonth == 1);
     bool canGoNext() => !(viewYear == now.year && viewMonth == now.month);
-
-    bool isDisabled(int day) {
-      final dt = DateTime(viewYear, viewMonth, day);
-      if (jd != null) {
-        final jdNorm = DateTime(jd.year, jd.month, jd.day);
-        if (dt.isBefore(jdNorm)) return true;
-      }
-      if (dt.isAfter(now)) return true;
-      return false;
-    }
 
     await showDialog<void>(
       context: context,
@@ -574,28 +613,17 @@ class LabourTab extends StatelessWidget {
                   runSpacing: 4,
                   children: List.generate(dim, (i) {
                     final day = i + 1;
-                    final disabled = isDisabled(day);
-                    final checked = presentSet().contains(day);
+                    final disabled = isDisabled(viewYear, viewMonth, day);
+                    final checked = isPresent(viewYear, viewMonth, day);
                     return GestureDetector(
                       onTap: disabled ? null : () {
                         setInnerState(() {
-                          final s = presentSet();
-                          if (s.contains(day)) s.remove(day);
-                          else s.add(day);
+                          toggleDay(viewYear, viewMonth, day);
                         });
                       },
                       onLongPress: disabled ? null : () {
                         setInnerState(() {
-                          final dt = DateTime(viewYear, viewMonth, day);
-                          if (_absentFromDate != null &&
-                              _absentFromDate!.year == dt.year &&
-                              _absentFromDate!.month == dt.month &&
-                              _absentFromDate!.day == dt.day) {
-                            _absentFromDate = null;
-                          } else {
-                            _absentFromDate = dt;
-                          }
-                          monthState.clear();
+                          toggleRangeFrom(DateTime(viewYear, viewMonth, day));
                         });
                       },
                       child: Container(
@@ -657,112 +685,45 @@ class LabourTab extends StatelessWidget {
               ElevatedButton(
                 onPressed: () async {
                   try {
-                    final jdNorm = jd != null ? DateTime(jd.year, jd.month, jd.day) : null;
+                    final allKeys = absentDays.toList()..sort();
 
-                    for (final entry in monthState.entries) {
-                      final parts = entry.key.split('-');
-                      final y = int.parse(parts[0]);
-                      final m = int.parse(parts[1]);
-                      final dim = DateTime(y, m + 1, 0).day;
-                      final present = entry.value;
+                    final ranges = <Map<String, String>>[];
+                    if (allKeys.isNotEmpty) {
+                      var p = allKeys[0].split('-');
+                      DateTime rangeStart = DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+                      DateTime rangeEnd = rangeStart;
 
-                      final newAbsent = <int>{};
-                      for (var d = 1; d <= dim; d++) {
-                        final dt = DateTime(y, m, d);
-                        if (jdNorm != null && dt.isBefore(jdNorm)) continue;
-                        if (dt.isAfter(now)) continue;
-                        if (!present.contains(d)) newAbsent.add(d);
-                      }
-
-                      bool unchanged = true;
-                      final existingInMonth = (worker.absenceRanges ?? <WorkerAbsenceRange>[])
-                          .where((a) => !a.fromDate.isAfter(DateTime(y, m, dim)) && !a.toDate.isBefore(DateTime(y, m, 1)))
-                          .toList();
-                      final existingDays = <int>{};
-                      for (final a in existingInMonth) {
-                        final fromNorm = DateTime(a.fromDate.year, a.fromDate.month, a.fromDate.day);
-                        final toNorm = DateTime(a.toDate.year, a.toDate.month, a.toDate.day);
-                        final effStart = fromNorm.isBefore(DateTime(y, m, 1)) ? DateTime(y, m, 1) : fromNorm;
-                        final effEnd = toNorm.isAfter(DateTime(y, m, dim)) ? DateTime(y, m, dim) : toNorm;
-                        var cur = effStart;
-                        while (!cur.isAfter(effEnd)) {
-                          existingDays.add(cur.day);
-                          cur = cur.add(const Duration(days: 1));
+                      for (var i = 1; i < allKeys.length; i++) {
+                        p = allKeys[i].split('-');
+                        final currDate = DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+                        if (currDate.difference(rangeEnd).inDays == 1) {
+                          rangeEnd = currDate;
+                        } else {
+                          ranges.add({
+                            'fromDate': rangeStart.toIso8601String(),
+                            'toDate': rangeEnd.toIso8601String(),
+                          });
+                          rangeStart = currDate;
+                          rangeEnd = currDate;
                         }
                       }
-                      if (existingDays.length != newAbsent.length || !existingDays.containsAll(newAbsent)) {
-                        unchanged = false;
+                      if (ongoing) {
+                        rangeEnd = DateTime(9999, 12, 31);
                       }
-                      if (unchanged) continue;
-
-                      for (final a in existingInMonth) {
-                        await api.deleteWorkerAbsence(
-                          managerId: manager.id,
-                          workerId: worker.id,
-                          absenceId: a.id,
-                        );
-                      }
-
-                      final sorted = newAbsent.toList()..sort();
-                      if (sorted.isNotEmpty) {
-                        int rs = sorted[0], re = sorted[0];
-                        for (var j = 1; j < sorted.length; j++) {
-                          if (sorted[j] == re + 1) {
-                            re = sorted[j];
-                          } else {
-                            await api.addWorkerAbsence(
-                              managerId: manager.id,
-                              workerId: worker.id,
-                              fromDate: DateTime(y, m, rs),
-                              toDate: DateTime(y, m, re),
-                            );
-                            rs = sorted[j];
-                            re = sorted[j];
-                          }
-                        }
-                        await api.addWorkerAbsence(
-                          managerId: manager.id,
-                          workerId: worker.id,
-                          fromDate: DateTime(y, m, rs),
-                          toDate: DateTime(y, m, re),
-                        );
-                      }
+                      ranges.add({
+                        'fromDate': rangeStart.toIso8601String(),
+                        'toDate': rangeEnd.toIso8601String(),
+                      });
+                    } else if (ongoing) {
+                      // Should not happen, but guard
+                      ongoing = false;
                     }
 
-                    if (_absentFromDate != null) {
-                      final afdNorm = DateTime(_absentFromDate!.year, _absentFromDate!.month, _absentFromDate!.day);
-                      if (!afdNorm.isAfter(now)) {
-                        final existingAfter = (worker.absenceRanges ?? <WorkerAbsenceRange>[])
-                            .where((a) {
-                              final toNorm = DateTime(a.toDate.year, a.toDate.month, a.toDate.day);
-                              return !toNorm.isBefore(afdNorm);
-                            })
-                            .toList();
-                        bool alreadyCovered = false;
-                        for (final a in existingAfter) {
-                          final fromNorm = DateTime(a.fromDate.year, a.fromDate.month, a.fromDate.day);
-                          if (!fromNorm.isAfter(afdNorm)) {
-                            alreadyCovered = true;
-                            break;
-                          }
-                        }
-                        if (!alreadyCovered) {
-                          for (final a in existingAfter) {
-                            await api.deleteWorkerAbsence(
-                              managerId: manager.id,
-                              workerId: worker.id,
-                              absenceId: a.id,
-                            );
-                          }
-                          await api.addWorkerAbsence(
-                            managerId: manager.id,
-                            workerId: worker.id,
-                            fromDate: _absentFromDate!,
-                            toDate: now,
-                          );
-                        }
-                      }
-                    }
+                    await api.replaceWorkerAbsences(
+                      managerId: manager.id,
+                      workerId: worker.id,
+                      absenceRanges: ranges,
+                    );
 
                     await onRefresh();
                     if (context.mounted) Navigator.of(context).pop();

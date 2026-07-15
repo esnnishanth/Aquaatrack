@@ -429,11 +429,11 @@ class _ForgotMeshPainter extends CustomPainter {
 class _GlassField extends StatefulWidget {
   const _GlassField({
     required this.controller, required this.hint,
-    required this.icon, this.obscure = false, this.keyboardType,
+    required this.icon, this.obscure = false,
   });
 
   final TextEditingController controller; final String hint;
-  final IconData icon; final bool obscure; final TextInputType? keyboardType;
+  final IconData icon; final bool obscure;
 
   @override
   State<_GlassField> createState() => _GlassFieldState();
@@ -468,7 +468,7 @@ class _GlassFieldState extends State<_GlassField> {
         controller: widget.controller,
         focusNode: _node,
         obscureText: widget.obscure ? _hidden : false,
-        keyboardType: widget.keyboardType,
+        keyboardType: null,
         onTapOutside: (_) => FocusScope.of(context).unfocus(),
         style: GoogleFonts.inter(color: const Color(0xFF1A2332), fontSize: 14),
         cursorColor: AppTheme.primary,

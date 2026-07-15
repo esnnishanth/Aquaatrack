@@ -14,7 +14,6 @@ import 'screens/manager/manager_dashboard_screen.dart';
 import 'screens/owner/forgot_password_screen.dart';
 import 'screens/owner/owner_dashboard_screen.dart';
 import 'localization/app_localizations.dart';
-import 'localization/ext.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
